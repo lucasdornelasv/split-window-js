@@ -13,6 +13,8 @@ export interface FakeTab<TContent = unknown> {
   containerKey: string | null;
   active: boolean;
   destroyed: boolean;
+  /** Inputs received through `setInputs`, merged. */
+  inputs: Record<string, unknown>;
 }
 
 /** A container rendered by the fake engine. */
@@ -122,8 +124,14 @@ export class FakeSplitEngine<TContent = unknown, THost = unknown> implements Spl
       containerKey: null,
       active: false,
       destroyed: false,
+      inputs: {},
     });
     return tab.id;
+  }
+
+  setInputs(handle: unknown, inputs: Readonly<Record<string, unknown>>): void {
+    this.record('setInputs', handle as string);
+    Object.assign(this.tab(handle).inputs, inputs);
   }
 
   attach(handle: unknown, container: ContainerState<THost>, index: number): void {

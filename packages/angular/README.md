@@ -105,7 +105,7 @@ Os valores padrão de `activate` e `closable` podem ser trocados no `provideSpli
 
 ## `SplitWindowRef`
 
-`id`, `result` (resolve no `close`, rejeita no `dismiss`), `rejected`, `componentInstance`, `containerKey`, `title`, `label`, `groupKey`, `closable`, `isActive`, `isOpen`; métodos `close(result?, { force? })`, `dismiss(reason?, { force? })`, `activate()`, `moveTo(key, index?)`, `setTitle()`, `setClosable()`, `setCanClose()`, `setCanMove()`; eventos descritos no [guia de eventos](../../docs/guides/eventos.md).
+`id`, `result` (resolve no `close`, rejeita no `dismiss`), `rejected`, `componentInstance`, `containerKey`, `title`, `label`, `groupKey`, `closable`, `isActive`, `isOpen`; métodos `close(result?, { force? })`, `dismiss(reason?, { force? })`, `activate()`, `moveTo(key, index?)`, `setTitle()`, `setClosable()`, `setCanClose()`, `setCanMove()`, `setInputData(data)` (`setInput` só nos inputs que o componente declara, pelo nome da propriedade ou pelo alias; ignora o resto e valores `undefined`), `attachTo(subscription)` (liga a aba a uma `Subscription`: fechar a aba encerra a subscription, e encerrar a subscription com a aba aberta faz `dismiss`), `asRequest()` (Observable que emite o resultado do `close` e completa; completa sem valor no `dismiss`; cancelar a inscrição antes faz `dismiss` da aba); eventos descritos no [guia de eventos](../../docs/guides/eventos.md).
 
 ## `SplitActiveWindow`
 

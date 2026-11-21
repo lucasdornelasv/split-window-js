@@ -1,4 +1,4 @@
-import { Subject, type Observable } from 'rxjs';
+import { Observable, Subject, Subscription, asapScheduler, observeOn } from 'rxjs';
 import type {
   SplitCloseGuard,
   SplitCloseTrigger,
@@ -22,6 +22,7 @@ export interface SplitRefHost {
   _moveTo(ref: SplitWindowRef, containerKey: string, index: number | undefined): boolean;
   _setTitle(ref: SplitWindowRef, title: string): void;
   _changed(ref: SplitWindowRef): void;
+  _setInputs(ref: SplitWindowRef, inputs: Readonly<Record<string, unknown>>): void;
   _isActive(ref: SplitWindowRef): boolean;
 }
 
@@ -215,6 +216,83 @@ export class SplitWindowRef<T = unknown> {
   setCanMove(guard: SplitMoveGuard | null): void {
     if (!this.isOpen) return;
     this._state.canMove = guard;
+  }
+
+  /**
+   * Updates inputs of the open content (in Angular, `setInput` on the component). Only names
+   * the content declares are applied and `undefined` values are skipped; the rest is ignored.
+   * Does nothing for closed tabs, templates or a `null`/`undefined` argument.
+   */
+  setInputData(data: Readonly<Record<string, unknown>> | null | undefined): void {
+    if (data == null || !this.isOpen) return;
+    if (typeof data !== 'object' || Array.isArray(data)) {
+      throw new SplitInvalidOptionError('inputs', data, 'objeto');
+    }
+    this.host._setInputs(this, data);
+  }
+
+  /**
+   * Ties the tab to `subscription`, both ways:
+   * - when the tab is dismissed, or hidden after `close`, `subscription` is unsubscribed;
+   * - when `subscription` is unsubscribed while the tab is open, the tab is dismissed (going
+   *   through `canClose`).
+   *
+   * Returns the link: unsubscribing it undoes the tie without touching either side. Attaching
+   * to a closed subscription dismisses the tab at once; attaching a finished tab unsubscribes
+   * `subscription` at once.
+   */
+  attachTo(subscription: Subscription): Subscription {
+    if (typeof subscription?.add !== 'function' || typeof subscription.remove !== 'function') {
+      throw new SplitInvalidOptionError('subscription', subscription, 'Subscription do RxJS');
+    }
+    const end = () => subscription.unsubscribe();
+    const watchers = new Subscription();
+    watchers.add(this.dismissed.subscribe(end));
+    // `hidden` completes right after it emits, and at once for a tab that already finished.
+    watchers.add(this.hidden.subscribe({ complete: end }));
+    const dismissTab = () => {
+      if (this.isOpen) void this.dismiss();
+    };
+    subscription.add(watchers);
+    subscription.add(dismissTab);
+    const link = new Subscription(() => {
+      subscription.remove(watchers);
+      subscription.remove(dismissTab);
+      watchers.unsubscribe();
+    });
+    subscription.add(link);
+    return link;
+  }
+
+  /**
+   * The tab as a request: emits the `close` result and completes; completes without a value
+   * on `dismiss` (or when the open was rejected). Unsubscribing before that dismisses the tab
+   * (see `attachTo`). Values arrive on the `asapScheduler`.
+   */
+  asRequest<R = any>(): Observable<R> {
+    return new Observable<R>((subscriber) => {
+      if (!this.isOpen) {
+        // Closed or rejected already: answer from the result.
+        this.result.then(
+          (value: R) => {
+            subscriber.next(value);
+            subscriber.complete();
+          },
+          () => subscriber.complete(),
+        );
+        return;
+      }
+      // Subscribed before `attachTo`, so these run first when the tab closes. They cannot run
+      // before `link` exists: the subjects do not replay.
+      const settle = (emit: boolean, value?: R) => {
+        link.unsubscribe(); // the request ends with the tab: no dismiss on teardown
+        if (emit) subscriber.next(value as R);
+        subscriber.complete();
+      };
+      subscriber.add(this.closed.subscribe((value: R) => settle(true, value)));
+      subscriber.add(this.dismissed.subscribe(() => settle(false)));
+      const link = this.attachTo(subscriber);
+    }).pipe(observeOn(asapScheduler));
   }
 
   /** @internal */

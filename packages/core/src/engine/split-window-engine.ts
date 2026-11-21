@@ -49,6 +49,11 @@ export interface SplitWindowEngine<TContent = unknown, THost = unknown, TAdapter
   activate(tab: TabHandle): void;
   deactivate(tab: TabHandle): void;
   /**
+   * Sets inputs on the content of an open tab (`SplitWindowRef.setInputData`). The engine
+   * decides which names apply; content without inputs ignores the call.
+   */
+  setInputs?(tab: TabHandle, inputs: Readonly<Record<string, unknown>>): void;
+  /**
    * Destroys a closed tab. When the container of the tab is hiding with an animation, the
    * engine may keep the tab visible until the end and return a promise: the core emits
    * `hidden` only after it resolves.

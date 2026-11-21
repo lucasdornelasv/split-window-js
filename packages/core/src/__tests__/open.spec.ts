@@ -61,6 +61,23 @@ describe('open', () => {
     expect(engine.tabs.get(ref.id)!.adapterOptions).toEqual({ inputs: { x: 1 } });
   });
 
+  it('setInputData passes the inputs to the engine while the tab is open', async () => {
+    const { registry, controller, engine } = setup();
+    registry.registerContainer('a', host());
+    const ref = controller.open('c', { containerKey: 'a' });
+    ref.setInputData({ x: 1 });
+    ref.setInputData({ y: 2 });
+    ref.setInputData(null);
+    ref.setInputData(undefined);
+    expect(engine.callsOf('setInputs')).toHaveLength(2);
+    expect(engine.tabs.get(ref.id)!.inputs).toEqual({ x: 1, y: 2 });
+    expect(() => ref.setInputData('x' as never)).toThrow(SplitInvalidOptionError);
+    expect(() => ref.setInputData([1] as never)).toThrow(SplitInvalidOptionError);
+    await ref.close();
+    ref.setInputData({ z: 3 });
+    expect(engine.callsOf('setInputs')).toHaveLength(2);
+  });
+
   it('activate: false keeps the current tab, but the first tab of an empty container is activated', () => {
     const { registry, open } = setup();
     registry.registerContainer('a', host());

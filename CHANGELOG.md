@@ -2,6 +2,12 @@
 
 Os pacotes `@split-window/core`, `@split-window/css-animation`, `@split-window/keyframes-animation` e `@split-window/angular` saem juntos, com a mesma versão (semver em lockstep).
 
+## 0.2.0 — 2026-11-21
+
+- `SplitWindowRef.setInputData(data)`: atualiza os inputs do conteúdo de uma aba aberta. No Angular, chama `setInput` só nos inputs que o componente declara (nome da propriedade ou alias), ignorando chaves desconhecidas e valores `undefined`. Novo membro opcional `setInputs` no contrato `SplitWindowEngine`.
+- `SplitWindowRef.attachTo(subscription)`: liga a aba a uma `Subscription` do RxJS nos dois sentidos (`dismiss` ou `hidden` encerram a subscription; encerrar a subscription com a aba aberta faz `dismiss`) e devolve o vínculo, que pode ser desfeito.
+- `SplitWindowRef.asRequest()`: a aba como uma requisição. Emite o resultado do `close` e completa, completa sem valor no `dismiss` ou se a abertura foi rejeitada, e cancelar a inscrição antes faz `dismiss` da aba. Emite no `asapScheduler`.
+
 ## 0.1.0 — 2026-11-21
 
 Primeira versão, implementando a Parte 1 do plano (`split-window-plano.md`).

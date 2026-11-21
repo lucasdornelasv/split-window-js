@@ -287,6 +287,11 @@ export class SplitWindowController<
     if (ref.containerKey) this.emitChange(ref.containerKey);
   }
 
+  /** @internal */
+  _setInputs(ref: SplitWindowRef, inputs: Readonly<Record<string, unknown>>): void {
+    this.engine.setInputs?.(ref._state.handle, inputs);
+  }
+
   // ---------------------------------------------------------------- closing
 
   /**

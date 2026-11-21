@@ -50,6 +50,17 @@ class TabComponent implements OnDestroy {
 }
 
 @Component({
+  selector: 'split-test-inputs-tab',
+  template: `<p class="inputs-content">{{ name() }} / {{ label() }}</p>`,
+})
+class InputsTabComponent {
+  readonly name = input('default');
+  // eslint-disable-next-line @angular-eslint/no-input-rename -- the alias is what is tested
+  readonly label = input('', { alias: 'tabLabel' });
+  readonly extra = signal('');
+}
+
+@Component({
   imports: [SplitContainerDirective],
   template: `
     @if (showMain()) {
@@ -185,6 +196,35 @@ describe('@split-window/angular', () => {
       expect(ref.componentInstance!.window.isActive()).toBe(true);
       expect(mainHost().querySelector('.tab-content')!.textContent).toContain('abc / none');
       expect(tabsIn(mainHost())).toEqual(['Contrato']);
+    });
+
+    it('setInputData sets declared inputs by property or alias and ignores the rest', async () => {
+      const ref = manager.open(InputsTabComponent, { inputs: { name: 'abc' } });
+      await stable();
+      ref.setInputData({ name: 'def', tabLabel: 'L', unknown: 1, extra: 'x' });
+      await stable();
+      const content = mainHost().querySelector('.inputs-content')!;
+      expect(content.textContent).toBe('def / L');
+      ref.setInputData({ name: undefined, label: 'M' }); // undefined is skipped
+      await stable();
+      expect(content.textContent).toBe('def / M');
+    });
+
+    it('setInputData on an inactive tab renders when it is activated', async () => {
+      const a = manager.open(InputsTabComponent);
+      manager.open(TabComponent);
+      await stable();
+      a.setInputData({ name: 'later' });
+      await stable();
+      a.activate();
+      await stable();
+      expect(mainHost().querySelector('.inputs-content')!.textContent).toBe('later / ');
+    });
+
+    it('setInputData on a template does nothing', async () => {
+      const ref = manager.open(fixture.componentInstance.tpl(), { containerKey: 'main' });
+      await stable();
+      expect(() => ref.setInputData({ name: 'x' })).not.toThrow();
     });
 
     it('uses the given injector as parent', async () => {

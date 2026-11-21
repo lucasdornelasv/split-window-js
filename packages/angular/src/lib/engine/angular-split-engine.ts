@@ -11,10 +11,12 @@ import {
   TemplateRef,
   createComponent,
   inject,
+  reflectComponentType,
   signal,
   type ComponentRef,
   type EmbeddedViewRef,
   type Renderer2,
+  type Type,
   type ViewRef,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
@@ -701,6 +703,38 @@ export class AngularSplitEngine extends BaseSplitWindowEngine<
     const h = handle as AngularTabHandle;
     this.setHidden(h.panel, true);
     h.cd?.detach();
+  }
+
+  /**
+   * `SplitWindowRef.setInputData`: `setInput` for each input the component declares. An
+   * inactive tab gets the values when it is activated again.
+   */
+  setInputs(handle: unknown, inputs: Readonly<Record<string, unknown>>): void {
+    const { componentRef } = handle as AngularTabHandle;
+    if (!componentRef) return; // template or server
+    for (const [name, value] of this.resolveInputParams(inputs, componentRef.componentType)) {
+      componentRef.setInput(name, value);
+    }
+  }
+
+  /**
+   * Entries of `data` that are inputs of `componentType`, skipping `undefined` values. Keys
+   * may be the property or the template name (alias); the yielded name is always the
+   * template name, the one `ComponentRef.setInput` expects.
+   */
+  protected *resolveInputParams(
+    data: Readonly<Record<string, unknown>>,
+    componentType: Type<unknown>,
+  ): Generator<[name: string, value: unknown]> {
+    const names = new Map<string, string>();
+    for (const { propName, templateName } of reflectComponentType(componentType)?.inputs ?? []) {
+      names.set(propName, templateName);
+      names.set(templateName, templateName);
+    }
+    for (const [key, value] of Object.entries(data)) {
+      const name = names.get(key);
+      if (value !== undefined && name !== undefined) yield [name, value];
+    }
   }
 
   // ------------------------------------------------------------ full screen
