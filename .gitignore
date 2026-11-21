@@ -1,0 +1,28 @@
+# Compiled output
+dist/
+/tmp
+/out-tsc
+/docs/api
+
+# Node
+node_modules/
+npm-debug.log
+
+# IDEs and editors
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Angular
+/.angular/cache
+
+# Tests
+coverage/
+e2e/test-results/
+e2e/playwright-report/
+__screenshots__/
+
+# System files
+.DS_Store
+Thumbs.db

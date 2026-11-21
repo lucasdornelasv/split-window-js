@@ -1,0 +1,90 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": {
+    "packageManager": "npm",
+    "analytics": false
+  },
+  "newProjectRoot": "packages",
+  "projects": {
+    "angular": {
+      "projectType": "library",
+      "root": "packages/angular",
+      "sourceRoot": "packages/angular/src",
+      "prefix": "split",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:library",
+          "options": {
+            "tsConfig": "packages/angular/tsconfig.lib.json",
+            "outputPath": "packages/angular/dist",
+            "allowedNonPeerDependencies": ["@split-window/core"]
+          },
+          "configurations": {
+            "production": {},
+            "development": {
+              "compilationMode": "full",
+              "declarationMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "packages/angular/tsconfig.spec.json",
+            "runner": "vitest",
+            "polyfills": []
+          },
+          "configurations": {
+            "zone": {
+              "polyfills": ["zone.js", "zone.js/testing"],
+              "providersFile": "packages/angular/src/testing/zone-providers.ts"
+            }
+          }
+        }
+      }
+    },
+    "demo-angular": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "apps/demo-angular",
+      "sourceRoot": "apps/demo-angular/src",
+      "prefix": "demo",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "apps/demo-angular/src/main.ts",
+            "tsConfig": "apps/demo-angular/tsconfig.app.json",
+            "assets": [],
+            "styles": ["apps/demo-angular/src/styles.css"]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                { "type": "initial", "maximumWarning": "800kB", "maximumError": "1.5MB" },
+                { "type": "anyComponentStyle", "maximumWarning": "8kB", "maximumError": "16kB" }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": { "buildTarget": "demo-angular:build:production" },
+            "development": { "buildTarget": "demo-angular:build:development" }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}

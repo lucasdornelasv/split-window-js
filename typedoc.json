@@ -1,0 +1,12 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "SplitWindow",
+  "entryPoints": ["packages/core/src/index.ts", "packages/core/src/testing/index.ts"],
+  "tsconfig": "packages/core/tsconfig.json",
+  "out": "docs/api",
+  "readme": "packages/core/README.md",
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeExternals": true,
+  "intentionallyNotExported": ["SplitRefHost", "AnyContainerOptions", "SplitRejectResolution"]
+}

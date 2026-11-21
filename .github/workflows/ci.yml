@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Build core
+        run: npm run build:core
+      - name: Type check
+        run: npm run typecheck
+      - name: Unit tests (core with coverage, Angular zoneless and with zone.js)
+        run: npm test
+      - name: Build Angular package
+        run: npm run build:angular
+      - name: Build demo
+        run: npm run build:demo
+
+  e2e:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:core
+      - name: Install Playwright browsers
+        run: npm run e2e:install
+      - name: End-to-end (Chromium, Firefox, WebKit)
+        run: npm run e2e
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report

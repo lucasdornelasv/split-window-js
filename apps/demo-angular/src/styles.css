@@ -1,0 +1,107 @@
+:root {
+  --demo-bg: #ffffff;
+  --demo-fg: #1f2328;
+  --demo-muted: #59636e;
+  --demo-border: #d1d9e0;
+  --demo-surface: #f6f8fa;
+  --demo-accent: #0969da;
+  --demo-code-bg: #0d1117;
+  --demo-code-fg: #e6edf3;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: var(--demo-fg);
+  background: var(--demo-bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.25rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+}
+
+p {
+  line-height: 1.5;
+}
+
+button.demo-button {
+  font: inherit;
+  padding: 6px 12px;
+  border: 1px solid var(--demo-border);
+  border-radius: 6px;
+  background: var(--demo-surface);
+  color: var(--demo-fg);
+  cursor: pointer;
+}
+
+button.demo-button:hover {
+  border-color: var(--demo-accent);
+}
+
+button.demo-button.primary {
+  background: var(--demo-accent);
+  border-color: var(--demo-accent);
+  color: #ffffff;
+}
+
+.demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.demo-host {
+  height: 260px;
+  min-width: 0;
+}
+
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+label.demo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+label.demo-field input,
+label.demo-field select,
+label.demo-field textarea {
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--demo-border);
+  border-radius: 4px;
+}
+
+.demo-log {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  background: var(--demo-surface);
+  border: 1px solid var(--demo-border);
+  border-radius: 6px;
+  padding: 8px;
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  white-space: pre-wrap;
+}

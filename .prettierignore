@@ -1,0 +1,9 @@
+dist
+coverage
+node_modules
+.angular
+docs/api
+package-lock.json
+e2e/test-results
+e2e/playwright-report
+split-window-plano.md
