@@ -1,0 +1,47 @@
+name: Release
+
+# Publishes the packages to npm when a version tag (v0.1.0, v0.2.0-beta.1...) is pushed.
+# Authentication: npm trusted publishing (OIDC), configured on each package's settings page
+# on npmjs.com, or, while it is not configured, the NPM_TOKEN secret (a granular token with
+# write access to the @split-window scope). OIDC wins when both are available.
+# Prereleases go to the "next" dist-tag.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Tag matches the package versions
+        run: |
+          version=$(node -p "require('./packages/core/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME, mas os pacotes estão em $version"; exit 1
+          fi
+      - run: npm run build:core
+      - run: npm run build:engines
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:angular
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            npm run release -- --provenance --tag next
+          else
+            npm run release -- --provenance
+          fi

@@ -2,7 +2,7 @@
 
 Os pacotes `@split-window/core`, `@split-window/css-animation`, `@split-window/keyframes-animation` e `@split-window/angular` saem juntos, com a mesma versão (semver em lockstep).
 
-## 0.1.0 — não publicada
+## 0.1.0 — 2026-11-21
 
 Primeira versão, implementando a Parte 1 do plano (`split-window-plano.md`).
 

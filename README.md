@@ -7,10 +7,12 @@ Biblioteca de abas em containers, no estilo das abas de um navegador desktop: nu
 
 ## Pacotes
 
-| Pacote                                                | Conteúdo                                                                                                                                                | Peer dependencies                                          |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [`@split-window/core`](packages/core/README.md)       | Estado, regras e contrato `SplitWindowEngine` para adaptadores. Inclui `@split-window/core/testing` (engine falsa).                                     | `rxjs`                                                     |
-| [`@split-window/angular`](packages/angular/README.md) | `provideSplitWindows`, `SplitWindowManager`, `SplitContainerRegistry`, `SplitActiveWindow`, diretiva `splitContainer`, shell e drag and drop com o CDK. | `@angular/core`, `@angular/common`, `@angular/cdk`, `rxjs` |
+| Pacote                                                                        | Conteúdo                                                                                                                                                | Peer dependencies                                          |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [`@split-window/core`](packages/core/README.md)                               | Estado, regras e contrato `SplitWindowEngine` para adaptadores. Inclui `@split-window/core/testing` (engine falsa).                                     | `rxjs`                                                     |
+| [`@split-window/angular`](packages/angular/README.md)                         | `provideSplitWindows`, `SplitWindowManager`, `SplitContainerRegistry`, `SplitActiveWindow`, diretiva `splitContainer`, shell e drag and drop com o CDK. | `@angular/core`, `@angular/common`, `@angular/cdk`, `rxjs` |
+| [`@split-window/css-animation`](packages/css-animation/README.md)             | Motor de animação por classes de estado e `transitionend`.                                                                                              | —                                                          |
+| [`@split-window/keyframes-animation`](packages/keyframes-animation/README.md) | Motor de animação com Web Animations (keyframes).                                                                                                       | —                                                          |
 
 Os pacotes são versionados juntos (mesma versão).
 
@@ -100,3 +102,18 @@ npm install
 | `npm run docs:api`                                 | Referência da API do core com TypeDoc, em `docs/api`.                                                                                                       |
 
 Os testes end-to-end usam só roles e atributos `data-*`; `DEMO_URL` (ou `DEMO_COMMAND` e `DEMO_PORT`) permite rodá-los contra outro servidor.
+
+## Publicação
+
+Os pacotes são publicados no npm na organização [`@split-window`](https://www.npmjs.com/org/split-window), todos com a mesma versão.
+
+1. `npm run version:set -- 0.2.0`, atualize o `CHANGELOG.md` e rode `npm install`.
+2. Faça o commit, crie a tag `v0.2.0` e envie: `git push origin main --tags`.
+3. O workflow [release.yml](.github/workflows/release.yml) roda lint, typecheck, testes e builds e publica com provenance (`npm run release`), na ordem core → motores de animação → Angular. Tags com sufixo (`v0.2.0-beta.1`) vão para a dist-tag `next`.
+
+Autenticação do workflow, uma das duas:
+
+- **Token**: crie no npmjs.com um _granular access token_ com escrita no escopo `@split-window` e salve como secret `NPM_TOKEN` no repositório (**Settings → Secrets and variables → Actions**). Funciona desde a primeira publicação.
+- **Trusted publishing** (sem segredo guardado): em cada pacote no npmjs.com, em **Settings → Trusted publishing**, cadastre o repositório `lucasdornelasv/split-window-js` e o workflow `release.yml`. O pacote precisa existir, então serve a partir da segunda versão (a primeira vai pelo token ou à mão). Quando os dois estão disponíveis, vale o trusted publishing, e o secret pode ser apagado.
+
+Publicação manual: `npm login`, os builds (`npm run build:core && npm run build:engines && npm run build:angular`) e `npm run release` (ou `npm run release -- --dry-run` para conferir). O `@split-window/angular` sai de `packages/angular/dist`; publicar direto de `packages/angular` é bloqueado. Versões que já estão no npm são puladas, então dá para rodar de novo depois de uma falha.

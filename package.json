@@ -32,7 +32,8 @@
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck -w @split-window/core && npm run typecheck -w @split-window/css-animation && npm run typecheck -w @split-window/keyframes-animation && tsc -p packages/angular/tsconfig.lib.json --noEmit && tsc -p apps/demo-angular/tsconfig.app.json --noEmit && tsc -p e2e/tsconfig.json",
     "docs:api": "typedoc",
-    "version:set": "node scripts/set-version.mjs"
+    "version:set": "node scripts/set-version.mjs",
+    "release": "node scripts/publish.mjs"
   },
   "dependencies": {
     "@angular/cdk": "^22.3.0",
@@ -60,5 +61,13 @@
     "typescript-eslint": "^8.73.0",
     "vitest": "^5.1.1",
     "zone.js": "^0.16.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lucasdornelasv/split-window-js.git"
+  },
+  "homepage": "https://github.com/lucasdornelasv/split-window-js#readme",
+  "bugs": {
+    "url": "https://github.com/lucasdornelasv/split-window-js/issues"
   }
 }
