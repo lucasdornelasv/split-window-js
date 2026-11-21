@@ -81,20 +81,20 @@ describe('close and dismiss', () => {
   });
 
   it('a custom container without closeWhenEmpty stays open when empty', async () => {
-    const { open, registry } = ctx();
+    const { open, controller } = ctx();
     const a = open();
     await a.close();
-    expect(registry.isContainerOpen('a')).toBe(true);
+    expect(controller.isContainerOpen('a')).toBe(true);
   });
 
   it('closeWhenEmpty closes (hides) the container without unregistering; a new tab reopens it', async () => {
-    const { registry, open, engine } = setup();
+    const { registry, open, engine, controller } = setup();
     registry.registerContainer('a', host(), { closeWhenEmpty: true });
     const ref = open({ containerKey: 'a' });
-    registry.expandContainer('a');
+    controller.expandContainer('a');
     await ref.close();
-    expect(registry.isContainerOpen('a')).toBe(false);
-    expect(registry.isContainerExpanded('a')).toBe(false);
+    expect(controller.isContainerOpen('a')).toBe(false);
+    expect(controller.isContainerExpanded('a')).toBe(false);
     expect(registry.hasContainer('a')).toBe(true);
     expect(engine.containers.get('a')).toMatchObject({
       mounted: true,
@@ -102,8 +102,50 @@ describe('close and dismiss', () => {
       expanded: false,
     });
     open({ containerKey: 'a' });
-    expect(registry.isContainerOpen('a')).toBe(true);
+    expect(controller.isContainerOpen('a')).toBe(true);
     expect(engine.callsOf('mountContainer')).toHaveLength(1);
+  });
+
+  it('closing the last tab of a closeWhenEmpty container hides the container before destroying the tab', async () => {
+    const { registry, open, engine } = setup();
+    registry.registerContainer('a', host(), { closeWhenEmpty: true });
+    const first = open({ containerKey: 'a' });
+    const last = open({ containerKey: 'a' });
+    engine.reset();
+    await first.close();
+    expect(engine.sequence()).not.toContain('setContainerOpen');
+    engine.reset();
+    await last.close();
+    const sequence = engine.sequence();
+    expect(sequence.indexOf('setContainerOpen')).toBeLessThan(sequence.indexOf('destroy'));
+  });
+
+  it('a deferred destroy delays hidden, not closed', async () => {
+    const { registry, open, engine } = setup();
+    registry.registerContainer('a', host(), { closeWhenEmpty: true });
+    const ref = open({ containerKey: 'a' });
+    engine.deferDestroy = true;
+    const events: string[] = [];
+    ref.closed.subscribe(() => events.push('closed'));
+    ref.hidden.subscribe(() => events.push('hidden'));
+    expect(await ref.close()).toBe(true);
+    await flush();
+    expect(events).toEqual(['closed']);
+    expect(ref.isOpen).toBe(false);
+    expect(engine.tabs.get(ref.id)!.destroyed).toBe(false);
+    engine.finishDestroys();
+    await flush();
+    expect(events).toEqual(['closed', 'hidden']);
+    expect(engine.tabs.get(ref.id)!.destroyed).toBe(true);
+  });
+
+  it('a tab opened by a closed handler keeps the closeWhenEmpty container open', async () => {
+    const { registry, open, controller } = setup();
+    registry.registerContainer('a', host(), { closeWhenEmpty: true });
+    const ref = open({ containerKey: 'a' });
+    ref.closed.subscribe(() => open({ containerKey: 'a' }));
+    await ref.close();
+    expect(controller.isContainerOpen('a')).toBe(true);
   });
 
   it('unregisterContainer dismisses the tabs with force and unmounts the shell', async () => {

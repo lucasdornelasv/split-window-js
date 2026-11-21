@@ -105,3 +105,14 @@ label.demo-field textarea {
   margin: 0;
   white-space: pre-wrap;
 }
+
+/* Classes added by modes on the "Modos e animação" page (panelClass). */
+split-container.demo-drawer {
+  --split-strip-bg: #eef4ff;
+  --split-tab-active-indicator: #8250df;
+}
+
+split-container.demo-compact {
+  --split-tab-height: 30px;
+  font-size: 0.85rem;
+}

@@ -28,7 +28,7 @@ import {
   moveNode,
   type SplitDropListData,
 } from './engine/angular-split-engine';
-import { SplitWindowRuntime } from './runtime';
+import { SplitWindowController } from './controller/split-window-controller';
 
 const TOKEN = new InjectionToken<string>('TOKEN');
 
@@ -133,7 +133,7 @@ describe('@split-window/angular', () => {
       expect(ref.isOpen).toBe(true);
       expect(ref.componentInstance).toBeUndefined();
       expect(document.querySelector('.split-body-host')).toBeNull();
-      reg.expandContainer('body-right');
+      TestBed.inject(SplitWindowManager).expandContainer('body-right');
       expect(await ref.close()).toBe(true);
     });
 
@@ -392,18 +392,18 @@ describe('@split-window/angular', () => {
       const ref = manager.open(TabComponent);
       await stable();
       const engine = TestBed.inject(AngularSplitEngine);
-      const runtime = TestBed.inject(SplitWindowRuntime);
+      const controller = TestBed.inject(SplitWindowController);
       const ended: unknown[] = [];
       ref.dragEnded.subscribe((e) => ended.push(e));
-      runtime.controller.beginDrag(ref);
+      controller.beginDrag(ref);
       engine.handleDrop(dropEvent(ref, { key: 'side', kind: 'strip' }, 0, true));
       expect(ref.containerKey).toBe('side');
       expect(ended).toEqual([{ moved: true }]);
-      runtime.controller.beginDrag(ref);
+      controller.beginDrag(ref);
       engine.handleDrop(dropEvent(ref, { key: 'main', kind: 'content' }, 0, false));
       expect(ref.containerKey).toBe('side');
       expect(ended.at(-1)).toEqual({ moved: false });
-      runtime.controller.beginDrag(ref);
+      controller.beginDrag(ref);
       engine.handleDrop(dropEvent(ref, { key: 'side', kind: 'content' }, 0, true));
       expect(ended.at(-1)).toEqual({ moved: false });
     });
@@ -435,7 +435,7 @@ describe('@split-window/angular', () => {
       const ref = manager.open(TabComponent);
       manager.open(TabComponent, { containerKey: 'side' });
       await stable();
-      registry.expandContainer('main');
+      manager.expandContainer('main');
       const engine = TestBed.inject(AngularSplitEngine);
       const list = { connectedTo: ['x'] as string[] } as never;
       engine.startDrag(ref, list);
@@ -459,7 +459,7 @@ describe('@split-window/angular', () => {
       const button = mainHost().querySelector('.split-expand-button') as HTMLButtonElement;
       button.click();
       await stable();
-      expect(registry.isContainerExpanded('main')).toBe(true);
+      expect(manager.isContainerExpanded('main')).toBe(true);
       const shell = document.querySelector(
         'split-container[data-container-key="main"]',
       ) as HTMLElement;
@@ -470,7 +470,7 @@ describe('@split-window/angular', () => {
       expect(shell.parentElement!.classList).toContain('split-expand-layer');
       shell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await stable();
-      expect(registry.isContainerExpanded('main')).toBe(false);
+      expect(manager.isContainerExpanded('main')).toBe(false);
       expect(shell.style.position).toBe('');
       expect(shell.parentElement).toBe(mainHost());
     });
@@ -504,7 +504,7 @@ describe('@split-window/angular', () => {
       await ref.close();
       await stable();
       expect(host.hidden).toBe(true);
-      expect(registry.isContainerOpen('body-left')).toBe(false);
+      expect(manager.isContainerOpen('body-left')).toBe(false);
       registry.useBodyContainers({ right: true });
       expect(document.querySelector('.split-body-host--left')).toBeNull();
     });

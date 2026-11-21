@@ -32,7 +32,9 @@ export const appConfig: ApplicationConfig = {
 };
 ```
 
-O registry pode ser injetado sozinho na inicialização, sem criar o manager.
+O registry pode ser injetado sozinho na inicialização, sem criar o manager. Ele só guarda configuração: abrir, fechar e tela cheia são do controller (`SplitWindowController`), exposto pelo manager.
+
+Tudo é provider e pode ser trocado por uma subclasse: `provideSplitWindows({ engine: MinhaEngine, controller: MeuController })`. Modos (`inline`, `push`, `overlay`, registrados, por classe ou função), motores de animação (`@split-window/css-animation`, `@split-window/keyframes-animation`) e o fechamento sincronizado da última aba estão em [Modos e animação](../../docs/guides/modos-e-animacao.md).
 
 ## Abrir um componente ou template
 
@@ -72,14 +74,18 @@ abrirNota() { this.manager.open(this.nota(), { title: 'Nota' }); }
 
 ### `SplitWindowManager`
 
-| Membro                                           | Descrição                                                                     |
-| ------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `open(content, options?)`                        | Abre um componente (`Type<T>`) ou `TemplateRef`. Devolve `SplitWindowRef<T>`. |
-| `dismissAll({ containerKey?, reason?, force? })` | Fechar tudo sequencial. Resolve com `{ closed, kept }`.                       |
-| `hasOpenWindows(containerKey?)`                  | Se há abas abertas (num container ou em qualquer um).                         |
-| `getTabs(containerKey)`                          | Abas de um container, na ordem da barra.                                      |
-| `registry`                                       | O mesmo `SplitContainerRegistry` injetável.                                   |
-| `tabMoved`, `tabRejected`                        | Eventos globais de movimentação e de rejeição por limite.                     |
+| Membro                                                                         | Descrição                                                                        |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `open(content, options?)`                                                      | Abre um componente (`Type<T>`) ou `TemplateRef`. Devolve `SplitWindowRef<T>`.    |
+| `dismissAll({ containerKey?, reason?, force? })`                               | Fechar tudo sequencial. Resolve com `{ closed, kept }`.                          |
+| `hasOpenWindows(containerKey?)`                                                | Se há abas abertas (num container ou em qualquer um).                            |
+| `getTabs(containerKey)`                                                        | Abas de um container, na ordem da barra.                                         |
+| `expandContainer(key)` / `restoreContainer(key)`                               | Tela cheia de um container (pelo controller; o registry só guarda configuração). |
+| `isContainerOpen(key)` / `isContainerExpanded(key)` / `getExpandedContainer()` | Estado dos containers.                                                           |
+| `containerStateChanged`                                                        | Container aberto, fechado, expandido ou restaurado.                              |
+| `containerTransitions`                                                         | Transições de abrir/fechar (`start`, `running`, `done`, `cancelled`).            |
+| `registry`                                                                     | O mesmo `SplitContainerRegistry` injetável.                                      |
+| `tabMoved`, `tabRejected`                                                      | Eventos globais de movimentação e de rejeição por limite.                        |
 
 ## Opções de abertura (`SplitWindowOptions`)
 

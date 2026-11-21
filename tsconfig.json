@@ -16,6 +16,8 @@
     "paths": {
       "@split-window/core": ["./packages/core/src/index.ts"],
       "@split-window/core/testing": ["./packages/core/src/testing/index.ts"],
+      "@split-window/css-animation": ["./packages/css-animation/src/index.ts"],
+      "@split-window/keyframes-animation": ["./packages/keyframes-animation/src/index.ts"],
       "@split-window/angular": ["./packages/angular/src/public-api.ts"]
     }
   },

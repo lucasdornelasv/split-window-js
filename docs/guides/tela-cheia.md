@@ -2,7 +2,7 @@
 
 Ao lado do botão de fechar tudo, a barra de abas tem um botão de tela cheia (⤢). Por padrão, ele expande o container para ocupar a janela inteira. A opção de container `expand` limita a expansão a uma área de referência (`bounds`), com tamanhos máximos, margem e alinhamento; `expand: false` esconde o botão. O shell passa a `position: fixed` com o retângulo calculado, acima da página, enquanto o host continua no lugar com o tamanho original, para o layout não pular.
 
-Clicar de novo no botão, apertar Esc (com o foco dentro do container) ou chamar `registry.restoreContainer(key)` restaura. Só um container fica expandido por vez, e enquanto isso o arraste de abas fica restrito a ele.
+Clicar de novo no botão, apertar Esc (com o foco dentro do container) ou chamar `manager.restoreContainer(key)` restaura. Só um container fica expandido por vez, e enquanto isso o arraste de abas fica restrito a ele.
 
 ## Exemplo
 
@@ -24,9 +24,9 @@ Clicar de novo no botão, apertar Esc (com o foco dentro do container) ou chamar
 
 ```ts
 // API
-registry.expandContainer('janela');
-registry.restoreContainer('janela');
-registry.containerStateChanged.subscribe(({ key, expanded }) => ...);
+manager.expandContainer('janela');
+manager.restoreContainer('janela');
+manager.containerStateChanged.subscribe(({ key, expanded }) => ...);
 ```
 
 | Opção de `expand`        | Padrão       | Descrição                                                                              |

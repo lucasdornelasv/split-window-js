@@ -6,34 +6,45 @@ import {
   Injectable,
   Injector,
   PLATFORM_ID,
+  RendererFactory2,
+  RendererStyleFlags2,
   TemplateRef,
   createComponent,
   inject,
   signal,
   type ComponentRef,
   type EmbeddedViewRef,
+  type Renderer2,
   type ViewRef,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import type { CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import {
+  BaseSplitWindowEngine,
   computeClosedDropZoneRect,
   computeExpandedRect,
   rectsMatch,
   resolveLength,
+  SplitStyleStash,
   type ContainerState,
+  type SplitAnimationEngine,
   type SplitRect,
-  type SplitWindowEngine,
+  type SplitTransitionPlan,
   type SplitWindowRef,
   type TabState,
 } from '@split-window/core';
 import { SplitActiveWindow } from '../active-window/split-active-window';
-import type { SplitWindowRuntime } from '../runtime';
+import { SplitAnimationEngineRegistry } from '../animation/split-animation-engine-registry';
+import type { SplitContainerElements } from '../animation/animation-engine';
+import { axisOf, type SplitModeContext } from '../modes/container-mode';
+import { SplitModeResolver, type SplitResolvedMode } from '../modes/mode-resolver';
 import { SplitContainerComponent } from '../shell/split-container.component';
 import {
   SplitDropZoneLayerComponent,
   type SplitFloatingZone,
 } from '../shell/split-drop-zone-layer.component';
+import { SPLIT_WINDOW_CONFIG } from '../tokens';
+import { rendererDomWriter } from './renderer-dom-writer';
 import type { SplitAngularTabOptions, SplitContent, SplitTemplateContext } from '../types';
 
 /** Data attached to every CDK drop list of the library. */
@@ -56,9 +67,21 @@ export interface AngularTabHandle {
    */
   cd: ChangeDetectorRef | null;
   active: SplitActiveWindow;
+  /** Container the panel is in. */
+  containerKey: string | null;
 }
 
-interface ShellEntry {
+/** Mode of a container and the static classes and styles it put on the elements. */
+export interface SplitContainerDisplay {
+  resolved: SplitResolvedMode;
+  /** `container.options` the mode was resolved from: a new object means a reconfiguration. */
+  options: object;
+  /** Classes and styles of the mode, kept while the container exists. */
+  stash: SplitStyleStash;
+}
+
+/** A mounted container. */
+export interface SplitShellEntry {
   componentRef: ComponentRef<SplitContainerComponent>;
   /** The `split-container` element. */
   shell: HTMLElement;
@@ -67,6 +90,11 @@ interface ShellEntry {
   bodyHost: HTMLElement | null;
   backdrop: HTMLElement | null;
   expandCleanup: (() => void) | null;
+  display: SplitContainerDisplay;
+  /** Open layout of the mode, undone after the container hides. */
+  layout: SplitStyleStash;
+  /** Context of the applied open layout; `null` while closed. */
+  modeCtx: SplitModeContext | null;
 }
 
 const hasMoveBefore =
@@ -74,9 +102,15 @@ const hasMoveBefore =
 
 /**
  * Moves a node keeping its state where the browser supports `moveBefore()` (iframes do not
- * reload, videos keep playing, focus is kept). Falls back to `insertBefore`.
+ * reload, videos keep playing, focus is kept). Falls back to `insertBefore`, through the
+ * renderer when one is given (`Renderer2` has no `moveBefore`).
  */
-export function moveNode(parent: Element, node: Element, before: Node | null = null): void {
+export function moveNode(
+  parent: Element,
+  node: Element,
+  before: Node | null = null,
+  renderer?: Renderer2,
+): void {
   if (node.parentNode === parent && node.nextSibling === before) return;
   if (hasMoveBefore && node.isConnected && parent.isConnected) {
     try {
@@ -86,31 +120,66 @@ export function moveNode(parent: Element, node: Element, before: Node | null = n
       // different documents or a disconnected node: fall back
     }
   }
-  parent.insertBefore(node, before);
+  if (renderer) renderer.insertBefore(parent, node, before);
+  else parent.insertBefore(node, before);
 }
 
 function toRect(rect: DOMRect | SplitRect): SplitRect {
   return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
 }
 
+/** Position of a floating panel (custom push/overlay) inside its host: `inset` per side. */
+const PANEL_INSET: Record<'push' | 'overlay', Record<string, string>> = {
+  // overlay: against the side edge of the host
+  overlay: { right: '0 0 0 auto', left: '0 auto 0 0', top: '0 0 auto 0', bottom: 'auto 0 0 0' },
+  // push: against the content side, so the panel slides in as the host grows
+  push: { right: '0 auto 0 0', left: '0 0 0 auto', top: 'auto 0 0 0', bottom: '0 0 auto 0' },
+};
+
 /**
- * The Angular engine: creates components with `createComponent` attached to the
- * `ApplicationRef`, renders the shells, moves tabs without destroying them and applies
- * full screen. It never decides: it asks the core.
+ * The Angular engine: renders the shells with `createComponent`, moves tabs without
+ * destroying them, applies full screen, the modes of the containers and, through
+ * `BaseSplitWindowEngine`, their animated transitions. It never decides: it asks the core.
+ * Every write to the DOM goes through `Renderer2` (also the styles of the modes, through a
+ * renderer-backed `SplitStyleStash`); only reads, focus, `moveBefore` and the synthetic
+ * events of `cancelDrag` use the DOM directly.
+ *
+ * Replace it with a subclass through dependency injection:
+ *
+ * ```ts
+ * @Injectable()
+ * class MyEngine extends AngularSplitEngine {
+ *   protected override enter(container: ContainerState<HTMLElement>) {
+ *     super.enter(container);
+ *     // ...
+ *   }
+ * }
+ * provideSplitWindows({ engine: MyEngine });
+ * ```
  */
 @Injectable()
-export class AngularSplitEngine implements SplitWindowEngine<
+export class AngularSplitEngine extends BaseSplitWindowEngine<
   SplitContent,
   HTMLElement,
-  SplitAngularTabOptions
+  SplitAngularTabOptions,
+  HTMLElement
 > {
-  private readonly appRef = inject(ApplicationRef);
-  private readonly environmentInjector = inject(EnvironmentInjector);
-  private readonly document = inject(DOCUMENT);
+  protected readonly appRef = inject(ApplicationRef);
+  protected readonly environmentInjector = inject(EnvironmentInjector);
+  protected readonly document = inject(DOCUMENT);
+  protected readonly resolver = inject(SplitModeResolver);
+  protected readonly config = inject(SPLIT_WINDOW_CONFIG);
+  /** Named animation engines, resolved on each transition. */
+  protected readonly animationEngines = inject(SplitAnimationEngineRegistry);
+  /** Renderer for every DOM write of the engine. */
+  protected readonly renderer: Renderer2 = inject(RendererFactory2).createRenderer(null, null);
+  /** Writer of the style stashes (modes included), backed by the renderer. */
+  protected readonly domWriter = rendererDomWriter(this.renderer);
   readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
-  private runtime: SplitWindowRuntime | null = null;
-  private readonly shells = new Map<string, ShellEntry>();
+  protected readonly shells = new Map<string, SplitShellEntry>();
+  /** Modes of custom containers prepared on registration, before their first tab. */
+  protected readonly prepared = new Map<string, SplitContainerDisplay>();
   private layerRef: ComponentRef<SplitDropZoneLayerComponent> | null = null;
   private expandLayer: HTMLElement | null = null;
   private readonly lastKnownRects = new WeakMap<HTMLElement, SplitRect>();
@@ -124,45 +193,55 @@ export class AngularSplitEngine implements SplitWindowEngine<
   /** Floating drop zones shown during a drag. */
   readonly floatingZones = signal<SplitFloatingZone[]>([]);
 
-  /** @internal */
-  connect(runtime: SplitWindowRuntime): void {
-    this.runtime = runtime;
-  }
-
-  /** @internal */
-  disconnect(): void {
+  override disconnect(): void {
     for (const key of [...this.shells.keys()]) this.destroyShell(key);
+    for (const display of this.prepared.values()) display.stash.restore();
+    this.prepared.clear();
     this.layerRef?.destroy();
     this.layerRef = null;
-    this.expandLayer?.remove();
+    if (this.expandLayer) this.detach(this.expandLayer);
     this.hostObserver?.disconnect();
-    this.runtime = null;
-  }
-
-  private get rt(): SplitWindowRuntime {
-    if (!this.runtime)
-      throw new Error('[split-window] engine used before provideSplitWindows() wiring');
-    return this.runtime;
+    super.disconnect();
   }
 
   // ------------------------------------------------------------ containers
 
+  /**
+   * Resolves the mode of a custom container on registration and styles its host, so a
+   * `push`/`overlay` host is collapsed before the first tab.
+   */
+  prepareContainer(container: ContainerState<HTMLElement>): void {
+    if (!this.isBrowser || container.kind !== 'custom' || !container.host) return;
+    if (this.shells.has(container.key)) return;
+    this.prepared.get(container.key)?.stash.restore();
+    const display = this.createDisplay(container);
+    this.prepared.set(container.key, display);
+    this.applyStatic(display, { host: container.host, shell: null, backdrop: null });
+  }
+
+  /** Undoes `prepareContainer`. */
+  releaseContainer(container: ContainerState<HTMLElement>): void {
+    this.prepared.get(container.key)?.stash.restore();
+    this.prepared.delete(container.key);
+  }
+
   mountContainer(container: ContainerState<HTMLElement>): void {
     if (!this.isBrowser || this.shells.has(container.key)) return;
+    const prepared = this.prepared.get(container.key);
+    this.prepared.delete(container.key);
+    let display: SplitContainerDisplay;
+    if (prepared && prepared.options === container.options) {
+      display = prepared;
+    } else {
+      prepared?.stash.restore();
+      display = this.createDisplay(container);
+    }
     let home: HTMLElement;
     let bodyHost: HTMLElement | null = null;
-    let backdrop: HTMLElement | null = null;
     if (container.kind === 'body') {
-      bodyHost = this.document.createElement('div');
-      bodyHost.className = `split-body-host split-body-host--${container.side}`;
-      bodyHost.hidden = true;
-      if (container.options.backdrop) {
-        backdrop = this.document.createElement('div');
-        backdrop.className = 'split-body-backdrop';
-        backdrop.hidden = true;
-        this.document.body.appendChild(backdrop);
-      }
-      this.document.body.appendChild(bodyHost);
+      bodyHost = this.createElement('div', 'split-body-host', `split-body-host--${container.side}`);
+      this.setHidden(bodyHost, true);
+      this.renderer.appendChild(this.document.body, bodyHost);
       home = bodyHost;
     } else {
       home = container.host!;
@@ -174,19 +253,24 @@ export class AngularSplitEngine implements SplitWindowEngine<
     });
     componentRef.setInput('containerKey', container.key);
     const shell = componentRef.location.nativeElement as HTMLElement;
-    shell.hidden = true;
-    home.appendChild(shell);
+    this.setHidden(shell, true);
+    this.renderer.appendChild(home, shell);
     this.appRef.attachView(componentRef.hostView);
     componentRef.changeDetectorRef.detectChanges();
-    this.shells.set(container.key, {
+    const entry: SplitShellEntry = {
       componentRef,
       shell,
       home,
       bodyHost,
-      backdrop,
+      backdrop: null,
       expandCleanup: null,
-    });
-    this.applyBodyOptions(container);
+      display,
+      layout: new SplitStyleStash(this.domWriter),
+      modeCtx: null,
+    };
+    this.shells.set(container.key, entry);
+    this.syncBackdrop(entry, container);
+    this.applyStatic(display, this.staticElements(entry));
     this.ensureLayer();
   }
 
@@ -194,32 +278,25 @@ export class AngularSplitEngine implements SplitWindowEngine<
     this.destroyShell(container.key);
   }
 
-  setContainerOpen(container: ContainerState<HTMLElement>, open: boolean): void {
+  /**
+   * Re-applies the options of a container after a change: backdrop, and the mode when
+   * `container.options` was replaced (reconfiguration).
+   */
+  applyContainerOptions(container: ContainerState<HTMLElement>): void {
     const entry = this.shells.get(container.key);
     if (!entry) return;
-    entry.shell.hidden = !open;
-    if (entry.bodyHost) entry.bodyHost.hidden = !open;
-    this.applyBodyOptions(container);
-    if (entry.backdrop) entry.backdrop.hidden = !open;
-  }
-
-  /** Re-applies size and backdrop of a body container (after a reconfiguration). */
-  applyBodyOptions(container: ContainerState<HTMLElement>): void {
-    const entry = this.shells.get(container.key);
-    if (!entry?.bodyHost) return;
-    entry.bodyHost.style.setProperty(
-      '--split-body-size',
-      container.options.size ?? this.rt.config.bodySize,
-    );
-    if (container.options.backdrop && !entry.backdrop) {
-      entry.backdrop = this.document.createElement('div');
-      entry.backdrop.className = 'split-body-backdrop';
-      this.document.body.insertBefore(entry.backdrop, entry.bodyHost);
-    } else if (!container.options.backdrop && entry.backdrop) {
-      entry.backdrop.remove();
-      entry.backdrop = null;
+    const backdropChanged = this.syncBackdrop(entry, container);
+    if (entry.display.options !== container.options) {
+      this.completeTransition(container.key, true);
+      const wasOpen = entry.modeCtx !== null;
+      if (wasOpen) this.removeLayout(entry);
+      entry.display.stash.restore();
+      entry.display = this.createDisplay(container);
+      this.applyStatic(entry.display, this.staticElements(entry));
+      if (wasOpen) this.applyLayout(entry, container);
+    } else if (backdropChanged) {
+      this.applyStatic(entry.display, this.staticElements(entry));
     }
-    if (entry.backdrop) entry.backdrop.hidden = !container.open;
   }
 
   /** Content element of a mounted container. */
@@ -232,16 +309,48 @@ export class AngularSplitEngine implements SplitWindowEngine<
     return this.shells.get(key)?.shell ?? null;
   }
 
-  private destroyShell(key: string): void {
+  /** Resolved mode of a mounted (or prepared) container. */
+  resolvedMode(key: string): SplitResolvedMode | null {
+    return (this.shells.get(key)?.display ?? this.prepared.get(key))?.resolved ?? null;
+  }
+
+  protected destroyShell(key: string): void {
     const entry = this.shells.get(key);
     if (!entry) return;
+    this.cancelTransition(key);
+    this.removeLayout(entry);
     entry.expandCleanup?.();
     this.hostObserver?.unobserve(entry.home);
+    entry.display.stash.restore();
     entry.componentRef.destroy();
-    entry.shell.remove();
-    entry.bodyHost?.remove();
-    entry.backdrop?.remove();
+    this.detach(entry.shell);
+    if (entry.bodyHost) this.detach(entry.bodyHost);
+    if (entry.backdrop) this.detach(entry.backdrop);
     this.shells.delete(key);
+  }
+
+  // ------------------------------------------------------------ DOM writes (Renderer2)
+
+  /** Creates an element with classes. */
+  protected createElement(tag: string, ...classes: string[]): HTMLElement {
+    const el = this.renderer.createElement(tag) as HTMLElement;
+    for (const name of classes) this.renderer.addClass(el, name);
+    return el;
+  }
+
+  /** Removes an element from its parent. */
+  protected detach(el: Element): void {
+    const parent = this.renderer.parentNode(el);
+    if (parent) this.renderer.removeChild(parent, el);
+  }
+
+  protected setHidden(el: HTMLElement, hidden: boolean): void {
+    this.renderer.setProperty(el, 'hidden', hidden);
+  }
+
+  protected toggleClass(el: Element, name: string, on: boolean): void {
+    if (on) this.renderer.addClass(el, name);
+    else this.renderer.removeClass(el, name);
   }
 
   private ensureLayer(): void {
@@ -249,8 +358,258 @@ export class AngularSplitEngine implements SplitWindowEngine<
     this.layerRef = createComponent(SplitDropZoneLayerComponent, {
       environmentInjector: this.environmentInjector,
     });
-    this.document.body.appendChild(this.layerRef.location.nativeElement);
+    this.renderer.appendChild(this.document.body, this.layerRef.location.nativeElement);
     this.appRef.attachView(this.layerRef.hostView);
+  }
+
+  // ------------------------------------------------------------ modes
+
+  protected createDisplay(container: ContainerState<HTMLElement>): SplitContainerDisplay {
+    return {
+      resolved: this.resolver.resolve(container),
+      options: container.options,
+      stash: new SplitStyleStash(this.domWriter),
+    };
+  }
+
+  private staticElements(entry: SplitShellEntry) {
+    return { host: entry.home, shell: entry.shell, backdrop: entry.backdrop };
+  }
+
+  /** Classes and styles of the mode that stay while the container exists. */
+  protected applyStatic(
+    display: SplitContainerDisplay,
+    els: { host: HTMLElement; shell: HTMLElement | null; backdrop: HTMLElement | null },
+  ): void {
+    const { stash, resolved } = display;
+    const { kind, layout, side, size } = resolved;
+    const { host, shell, backdrop } = els;
+    stash.restore();
+    stash.addClass(
+      host,
+      kind === 'custom' && 'split-host',
+      `split-layout--${layout}`,
+      `split-side--${side}`,
+      ...resolved.hostClass,
+    );
+    if (kind === 'body') stash.set(host, '--split-body-size', size ?? this.config.bodySize);
+    const floating = kind === 'custom' && layout !== 'inline';
+    if (floating) {
+      // The host does not take space while closed (push) or never does (overlay).
+      const axis = axisOf(side);
+      stash.set(host, 'flex', '0 0 auto');
+      stash.set(host, axis, '0px');
+      stash.set(host, `min-${axis}`, '0px');
+      stash.set(host, 'overflow', layout === 'push' ? 'hidden' : 'visible');
+      const view = this.document.defaultView;
+      if (view && ['', 'static'].includes(view.getComputedStyle(host).position)) {
+        stash.set(host, 'position', 'relative');
+      }
+    }
+    if (shell) {
+      stash.addClass(
+        shell,
+        `split-container--${kind}`,
+        `split-layout--${layout}`,
+        `split-side--${side}`,
+        ...resolved.panelClass,
+      );
+      if (floating) {
+        const horizontal = axisOf(side) === 'width';
+        stash.set(shell, '--split-inset', PANEL_INSET[layout as 'push' | 'overlay'][side]!);
+        stash.set(shell, '--split-w', horizontal ? 'var(--split-size)' : 'auto');
+        stash.set(shell, '--split-h', horizontal ? 'auto' : 'var(--split-size)');
+        if (layout === 'overlay' && size) stash.set(shell, '--split-size', size);
+      }
+    }
+    if (backdrop) stash.addClass(backdrop, ...resolved.backdropClass);
+  }
+
+  /** Creates or removes the backdrop of a body container. Returns whether it changed. */
+  private syncBackdrop(entry: SplitShellEntry, container: ContainerState<HTMLElement>): boolean {
+    if (!entry.bodyHost) return false;
+    const wanted = !!container.options.backdrop;
+    if (wanted === !!entry.backdrop) return false;
+    if (wanted) {
+      entry.backdrop = this.createElement('div', 'split-body-backdrop');
+      this.setHidden(entry.backdrop, !!entry.shell.hidden);
+      this.renderer.insertBefore(this.document.body, entry.backdrop, entry.bodyHost);
+    } else {
+      this.detach(entry.backdrop!);
+      entry.backdrop = null;
+    }
+    if (entry.modeCtx) entry.modeCtx = { ...entry.modeCtx, elements: this.elements(entry) };
+    return true;
+  }
+
+  protected elements(entry: SplitShellEntry): SplitContainerElements {
+    const { resolved } = entry.display;
+    let pushTarget: HTMLElement | null = null;
+    if (resolved.kind === 'body' && resolved.layout === 'push') {
+      const target = resolved.pushTarget;
+      pushTarget =
+        typeof target === 'string'
+          ? this.document.querySelector<HTMLElement>(target)
+          : (target ?? null);
+      if (!pushTarget) {
+        if (target) console.warn(`[split-window] pushTarget not found: ${String(target)}`);
+        pushTarget = this.document.body;
+      }
+    }
+    return { shell: entry.shell, host: entry.home, backdrop: entry.backdrop, pushTarget };
+  }
+
+  /** Applies the open layout of the mode. */
+  protected applyLayout(entry: SplitShellEntry, container: ContainerState<HTMLElement>): void {
+    const { resolved } = entry.display;
+    const ctx: SplitModeContext = {
+      container,
+      kind: resolved.kind,
+      layout: resolved.layout,
+      side: resolved.side,
+      size: resolved.size,
+      elements: this.elements(entry),
+      document: this.document,
+      styles: entry.layout,
+      data: {},
+    };
+    entry.modeCtx = ctx;
+    entry.layout.addClass(entry.home, 'split-host--open');
+    resolved.mode.open(ctx);
+  }
+
+  /** Removes the open layout of the mode. */
+  protected removeLayout(entry: SplitShellEntry): void {
+    const ctx = entry.modeCtx;
+    if (!ctx) return;
+    try {
+      entry.display.resolved.mode.close(ctx);
+    } finally {
+      entry.layout.restore();
+      entry.modeCtx = null;
+    }
+  }
+
+  private setVisible(entry: SplitShellEntry, visible: boolean): void {
+    this.setHidden(entry.shell, !visible);
+    if (entry.bodyHost) this.setHidden(entry.bodyHost, !visible);
+    if (entry.backdrop) this.setHidden(entry.backdrop, !visible);
+  }
+
+  // ------------------------------------------------------------ transition hooks
+
+  protected isMounted(container: ContainerState<HTMLElement>): boolean {
+    return this.shells.has(container.key);
+  }
+
+  protected isEntered(container: ContainerState<HTMLElement>): boolean {
+    return !!this.shells.get(container.key)?.modeCtx;
+  }
+
+  protected enter(container: ContainerState<HTMLElement>): void {
+    const entry = this.shells.get(container.key);
+    if (!entry) return;
+    this.setVisible(entry, true);
+    this.applyLayout(entry, container);
+  }
+
+  protected leave(container: ContainerState<HTMLElement>): void {
+    const entry = this.shells.get(container.key);
+    if (!entry) return;
+    const ctx = entry.modeCtx;
+    this.removeLayout(entry);
+    this.setVisible(entry, false);
+    if (ctx) entry.display.resolved.mode.hidden(ctx);
+  }
+
+  protected override beforeTransition(container: ContainerState<HTMLElement>): void {
+    this.applyContainerOptions(container);
+  }
+
+  /** Keeps the last tab and the strip on screen, without interaction, while hiding. */
+  protected override setLeaving(container: ContainerState<HTMLElement>, leaving: boolean): void {
+    const entry = this.shells.get(container.key);
+    if (!entry) return;
+    this.toggleClass(entry.shell, 'split-container--leaving', leaving);
+    if (leaving) {
+      entry.componentRef.instance.freeze();
+      this.renderer.setAttribute(entry.shell, 'inert', '');
+    } else {
+      this.renderer.removeAttribute(entry.shell, 'inert');
+      entry.componentRef.instance.unfreeze();
+    }
+  }
+
+  protected override setAnimating(container: ContainerState<HTMLElement>, on: boolean): void {
+    const shell = this.shells.get(container.key)?.shell;
+    if (shell) this.toggleClass(shell, 'split-animating', on);
+  }
+
+  protected override afterShown(container: ContainerState<HTMLElement>): void {
+    const ctx = this.shells.get(container.key)?.modeCtx;
+    if (ctx) this.shells.get(container.key)!.display.resolved.mode.shown(ctx);
+  }
+
+  protected override prefersReducedMotion(): boolean {
+    return !!this.document.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  protected transitionPlan(
+    container: ContainerState<HTMLElement>,
+    phase: 'show' | 'hide',
+  ): SplitTransitionPlan<HTMLElement> | null {
+    const entry = this.shells.get(container.key);
+    const ctx = entry?.modeCtx;
+    if (!entry || !ctx) return null;
+    const { resolved } = entry.display;
+    const engine = this.animationEngineFor(resolved);
+    if (!engine) return null;
+    const { from, to } = resolved.mode.frames(ctx, phase);
+    const push = resolved.layout === 'push';
+    return {
+      engine,
+      context: {
+        layout: resolved.layout,
+        side: resolved.side,
+        size: resolved.size,
+        elements: ctx.elements,
+        from,
+        to,
+        properties: {
+          host: push && resolved.kind === 'custom' ? axisOf(resolved.side) : null,
+          push: push && resolved.kind === 'body' ? `padding-${resolved.side}` : null,
+        },
+        options: resolved.animation,
+      },
+    };
+  }
+
+  /**
+   * Engine of a transition, resolved now: engines registered after the container was set up
+   * count. `null` when the container does not animate. An unknown engine name is reported
+   * and the transition uses the noop engine.
+   */
+  protected animationEngineFor(
+    resolved: SplitResolvedMode,
+  ): SplitAnimationEngine<HTMLElement> | null {
+    if (!resolved.animated) return null;
+    try {
+      return this.animationEngines.resolve(resolved.engine);
+    } catch (error) {
+      this.reportError(error);
+      return this.animationEngines.resolve('none');
+    }
+  }
+
+  protected destroyTab(handle: unknown): void {
+    const h = handle as AngularTabHandle;
+    h.view?.destroy(); // also detaches it from the ApplicationRef
+    this.detach(h.panel);
+    h.containerKey = null;
+  }
+
+  protected containerOfTab(handle: unknown): string | null {
+    return (handle as AngularTabHandle).containerKey;
   }
 
   // ------------------------------------------------------------ tabs
@@ -262,12 +621,11 @@ export class AngularSplitEngine implements SplitWindowEngine<
     options: SplitAngularTabOptions | undefined,
   ): AngularTabHandle {
     const active = new SplitActiveWindow(ref);
-    const panel = this.document.createElement('div');
-    panel.className = 'split-tab-panel';
-    panel.id = `${tab.id}-panel`;
-    panel.setAttribute('role', 'tabpanel');
-    panel.setAttribute('aria-labelledby', `${tab.id}-tab`);
-    panel.hidden = true;
+    const panel = this.createElement('div', 'split-tab-panel');
+    this.renderer.setAttribute(panel, 'id', `${tab.id}-panel`);
+    this.renderer.setAttribute(panel, 'role', 'tabpanel');
+    this.renderer.setAttribute(panel, 'aria-labelledby', `${tab.id}-tab`);
+    this.setHidden(panel, true);
     const handle: AngularTabHandle = {
       ref,
       panel,
@@ -275,6 +633,7 @@ export class AngularSplitEngine implements SplitWindowEngine<
       componentRef: null,
       cd: null,
       active,
+      containerKey: null,
     };
     if (!this.isBrowser) return handle;
 
@@ -290,14 +649,14 @@ export class AngularSplitEngine implements SplitWindowEngine<
         context,
         elementInjector,
       );
-      for (const node of view.rootNodes) panel.appendChild(node);
+      for (const node of view.rootNodes) this.renderer.appendChild(panel, node);
       handle.view = view;
       handle.cd = view;
     } else {
       const componentRef = createComponent(content, { environmentInjector, elementInjector });
       for (const [name, value] of Object.entries(options?.inputs ?? {}))
         componentRef.setInput(name, value);
-      panel.appendChild(componentRef.location.nativeElement);
+      this.renderer.appendChild(panel, componentRef.location.nativeElement);
       handle.componentRef = componentRef;
       handle.view = componentRef.hostView;
       handle.cd = componentRef.injector.get(ChangeDetectorRef);
@@ -311,21 +670,23 @@ export class AngularSplitEngine implements SplitWindowEngine<
 
   attach(handle: unknown, container: ContainerState<HTMLElement>): void {
     const h = handle as AngularTabHandle;
+    h.containerKey = container.key;
     const content = this.contentElement(container.key);
-    if (content) content.appendChild(h.panel);
+    if (content) this.renderer.appendChild(content, h.panel);
     h.active.sync();
   }
 
   move(handle: unknown, to: ContainerState<HTMLElement>): void {
     const h = handle as AngularTabHandle;
+    h.containerKey = to.key;
     const content = this.contentElement(to.key);
-    if (content) moveNode(content, h.panel);
+    if (content) moveNode(content, h.panel, null, this.renderer);
     h.active.sync();
   }
 
   activate(handle: unknown): void {
     const h = handle as AngularTabHandle;
-    h.panel.hidden = false;
+    this.setHidden(h.panel, false);
     if (!h.cd) return;
     h.cd.reattach();
     h.cd.markForCheck();
@@ -338,14 +699,8 @@ export class AngularSplitEngine implements SplitWindowEngine<
 
   deactivate(handle: unknown): void {
     const h = handle as AngularTabHandle;
-    h.panel.hidden = true;
+    this.setHidden(h.panel, true);
     h.cd?.detach();
-  }
-
-  destroy(handle: unknown): void {
-    const h = handle as AngularTabHandle;
-    h.view?.destroy(); // also detaches it from the ApplicationRef
-    h.panel.remove();
   }
 
   // ------------------------------------------------------------ full screen
@@ -358,7 +713,7 @@ export class AngularSplitEngine implements SplitWindowEngine<
     if (expanded) entry.expandCleanup = this.expand(container, entry);
   }
 
-  private expand(container: ContainerState<HTMLElement>, entry: ShellEntry): () => void {
+  protected expand(container: ContainerState<HTMLElement>, entry: SplitShellEntry): () => void {
     const win = this.document.defaultView!;
     const options = container.options.expand === false ? {} : (container.options.expand ?? {});
     const { shell } = entry;
@@ -382,27 +737,30 @@ export class AngularSplitEngine implements SplitWindowEngine<
         margin: options.margin,
         align: options.align,
       });
-      Object.assign(shell.style, {
+      const styles: Record<string, string> = {
         position: 'fixed',
         left: `${rect.x}px`,
         top: `${rect.y}px`,
         width: `${rect.width}px`,
         height: `${rect.height}px`,
-      });
+      };
+      for (const [prop, value] of Object.entries(styles)) {
+        this.renderer.setStyle(shell, prop, value, RendererStyleFlags2.DashCase);
+      }
       // An ancestor with transform/filter/contain/... makes `fixed` relative to it.
       if (!movedToLayer && !rectsMatch(toRect(shell.getBoundingClientRect()), rect)) {
-        moveNode(this.getExpandLayer(), shell);
+        moveNode(this.getExpandLayer(), shell, null, this.renderer);
         movedToLayer = true;
       }
     };
 
-    shell.classList.add('split-container--expanded');
-    entry.home.classList.add('split-host--expanded');
+    this.renderer.addClass(shell, 'split-container--expanded');
+    this.renderer.addClass(entry.home, 'split-host--expanded');
     apply();
     if (!shell.contains(this.document.activeElement)) shell.focus({ preventScroll: true });
 
     const onResize = () => apply();
-    win.addEventListener('resize', onResize);
+    const unlistenResize = this.renderer.listen('window', 'resize', onResize);
     const bounds = options.bounds;
     const boundsElement =
       typeof bounds === 'string' && bounds !== 'viewport'
@@ -415,17 +773,19 @@ export class AngularSplitEngine implements SplitWindowEngine<
     if (boundsElement) observer?.observe(boundsElement);
 
     return () => {
-      win.removeEventListener('resize', onResize);
+      unlistenResize();
       observer?.disconnect();
-      shell.classList.remove('split-container--expanded');
-      entry.home.classList.remove('split-host--expanded');
-      for (const prop of ['position', 'left', 'top', 'width', 'height'] as const)
-        shell.style[prop] = '';
+      this.renderer.removeClass(shell, 'split-container--expanded');
+      this.renderer.removeClass(entry.home, 'split-host--expanded');
+      for (const prop of ['position', 'left', 'top', 'width', 'height']) {
+        this.renderer.removeStyle(shell, prop, RendererStyleFlags2.DashCase);
+      }
       if (movedToLayer) {
         moveNode(
           entry.home,
           shell,
           originalNext && originalNext.parentNode === entry.home ? originalNext : null,
+          this.renderer,
         );
       }
     };
@@ -433,9 +793,8 @@ export class AngularSplitEngine implements SplitWindowEngine<
 
   private getExpandLayer(): HTMLElement {
     if (!this.expandLayer) {
-      this.expandLayer = this.document.createElement('div');
-      this.expandLayer.className = 'split-expand-layer';
-      this.document.body.appendChild(this.expandLayer);
+      this.expandLayer = this.createElement('div', 'split-expand-layer');
+      this.renderer.appendChild(this.document.body, this.expandLayer);
     }
     return this.expandLayer;
   }
@@ -447,10 +806,9 @@ export class AngularSplitEngine implements SplitWindowEngine<
    * shows the floating zones and connects the source strip to the valid targets.
    */
   startDrag(ref: SplitWindowRef, sourceList: CdkDropList<SplitDropListData>): void {
-    const { controller, registry } = this.rt;
+    const controller = this.controller;
     controller.beginDrag(ref);
-    const expanded = registry.getExpandedContainer();
-    if (expanded !== null) {
+    if (controller.getExpandedContainer() !== null) {
       sourceList.connectedTo = [];
       return;
     }
@@ -473,7 +831,7 @@ export class AngularSplitEngine implements SplitWindowEngine<
 
   /** Handles a drop on any list of the library and ends the drag. */
   handleDrop(event: CdkDragDrop<SplitDropListData, SplitDropListData, SplitWindowRef>): void {
-    const { controller } = this.rt;
+    const controller = this.controller;
     const ref = event.item.data;
     const target = event.container.data;
     let moved = false;
@@ -490,6 +848,7 @@ export class AngularSplitEngine implements SplitWindowEngine<
 
   cancelDrag(): void {
     if (!this.isBrowser) return;
+    // Synthetic pointer-up events have no Renderer2 equivalent: dispatched on the document.
     const init = { bubbles: true, cancelable: true, clientX: -10000, clientY: -10000 };
     this.document.dispatchEvent(new MouseEvent('mouseup', init));
     try {
@@ -508,7 +867,7 @@ export class AngularSplitEngine implements SplitWindowEngine<
   }
 
   private floatingZone(container: ContainerState<HTMLElement>): SplitFloatingZone | null {
-    const { config } = this.rt;
+    const config = this.config;
     const win = this.document.defaultView!;
     const size = {
       width: container.options.closedDropZone?.width ?? config.closedDropZone.width,
@@ -517,9 +876,11 @@ export class AngularSplitEngine implements SplitWindowEngine<
     const host = container.host;
     let hostInfo: { rect: SplitRect; displayed: boolean } | null = null;
     if (host && host.isConnected) {
-      const displayed = host.getClientRects().length > 0;
+      const rect = toRect(host.getBoundingClientRect());
+      // A collapsed host (push/overlay layouts) counts as not displayed.
+      const displayed = host.getClientRects().length > 0 && rect.width > 0 && rect.height > 0;
       if (displayed) this.remember(host);
-      hostInfo = { rect: toRect(host.getBoundingClientRect()), displayed };
+      hostInfo = { rect, displayed };
     }
     const anchor = container.options.closedDropZoneAnchor;
     const rect = computeClosedDropZoneRect({
@@ -536,6 +897,7 @@ export class AngularSplitEngine implements SplitWindowEngine<
   private remember(host: HTMLElement): void {
     if (!host.isConnected || host.getClientRects().length === 0) return;
     const rect = host.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return; // collapsed host
     this.lastKnownRects.set(host, toRect(rect));
   }
 }

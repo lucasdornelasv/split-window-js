@@ -18,6 +18,8 @@ const root = resolve(import.meta.dirname, '..');
 const files = [
   'package.json',
   'packages/core/package.json',
+  'packages/css-animation/package.json',
+  'packages/keyframes-animation/package.json',
   'packages/angular/package.json',
   'e2e/package.json',
 ];

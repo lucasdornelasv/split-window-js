@@ -8,7 +8,6 @@ import {
 } from '@angular/core';
 import {
   SplitContainerDirective,
-  SplitContainerRegistry,
   SplitWindowManager,
   type SplitWindowRef,
 } from '@split-window/angular';
@@ -32,14 +31,14 @@ ref.hidden.subscribe(() => ...);            // after destroy; every observable c
 
 manager.tabMoved.subscribe((e) => ...);
 manager.tabRejected.subscribe((e) => ...);
-registry.containerStateChanged.subscribe(({ key, open, expanded }) => ...);`;
+manager.containerStateChanged.subscribe(({ key, open, expanded }) => ...);`;
 
 @Component({
   imports: [DemoExampleComponent, SplitContainerDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1>Eventos</h1>
-    <p>Log ao vivo dos eventos das refs, do manager e do registry.</p>
+    <p>Log ao vivo dos eventos das refs, e do manager.</p>
     <demo-example name="events" heading="Log de eventos" [code]="code">
       <div class="demo-actions">
         <button type="button" class="demo-button primary" data-action="open" (click)="open()">
@@ -70,7 +69,6 @@ registry.containerStateChanged.subscribe(({ key, open, expanded }) => ...);`;
 })
 export default class EventsPage implements OnInit, OnDestroy {
   private readonly manager = inject(SplitWindowManager);
-  private readonly registry = inject(SplitContainerRegistry);
   private readonly subscription = new Subscription();
   private count = 0;
   readonly code = CODE;
@@ -86,8 +84,8 @@ export default class EventsPage implements OnInit, OnDestroy {
       this.manager.tabRejected.subscribe((e) => this.write(`manager.tabRejected ${e.resolution}`)),
     );
     this.subscription.add(
-      this.registry.containerStateChanged.subscribe((s) =>
-        this.write(`registry.containerStateChanged ${s.key} open=${s.open} expanded=${s.expanded}`),
+      this.manager.containerStateChanged.subscribe((s) =>
+        this.write(`manager.containerStateChanged ${s.key} open=${s.open} expanded=${s.expanded}`),
       ),
     );
   }

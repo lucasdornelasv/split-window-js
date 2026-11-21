@@ -41,6 +41,15 @@ const CONFIGS: Record<string, { label: string; config?: SplitBodyContainersConfi
   default: 'right',
 });`,
     },
+    push: {
+      label: 'Direita empurrando',
+      config: { right: { size: '360px', mode: 'push', animation: true }, default: 'right' },
+      code: `registry.useBodyContainers({
+  // push: the page gets padding-right while the panel is open; animated
+  right: { size: '360px', mode: 'push', animation: true },
+  default: 'right',
+});`,
+    },
   };
 
 @Component({

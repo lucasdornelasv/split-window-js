@@ -7,6 +7,7 @@ import {
   type SplitCloseAllResult,
   type SplitCloseGuard,
   type SplitCloseTrigger,
+  type SplitContainerStateChange,
   type SplitContainerView,
   type SplitDismissAllOptions,
   type SplitTabMovedEvent,
@@ -24,6 +25,7 @@ import {
   type SplitContainerRegistry,
 } from '../registry/split-container-registry.js';
 import { SplitContainerStack } from '../stack/split-container-stack.js';
+import { isPromiseLike } from '../utils/promise.js';
 import { SplitWindowRef, type SplitRefHost } from './split-window-ref.js';
 
 /** Where a move request comes from. Drags respect the expanded-container restriction. */
@@ -48,6 +50,7 @@ export class SplitWindowController<
   private readonly changesSubject = new Subject<string>();
   private readonly tabMovedSubject = new Subject<SplitTabMovedEvent>();
   private readonly tabRejectedSubject = new Subject<SplitTabRejectedEvent>();
+  private readonly stateSubject = new Subject<SplitContainerStateChange>();
   private readonly closingAll = new Map<string, number>();
   private readonly removing = new Set<ContainerRecord<THost>>();
   private readonly registrySubscription: Subscription;
@@ -61,6 +64,9 @@ export class SplitWindowController<
   readonly tabMoved: Observable<SplitTabMovedEvent> = this.tabMovedSubject.asObservable();
   /** A tab refused by the tab limit. */
   readonly tabRejected: Observable<SplitTabRejectedEvent> = this.tabRejectedSubject.asObservable();
+  /** Container opened, closed, expanded or restored. */
+  readonly containerStateChanged: Observable<SplitContainerStateChange> =
+    this.stateSubject.asObservable();
 
   constructor(
     readonly registry: SplitContainerRegistry<THost>,
@@ -69,6 +75,41 @@ export class SplitWindowController<
   ) {
     this.config = mergeSplitWindowConfig(config);
     this.registrySubscription = registry._events.subscribe((event) => this.onRegistryEvent(event));
+    engine.connect?.(this);
+    for (const record of registry._all()) engine.prepareContainer?.(record);
+  }
+
+  // ---------------------------------------------------------------- container state
+
+  isContainerOpen(key: string): boolean {
+    return this.registry._get(key)?.open ?? false;
+  }
+
+  isContainerExpanded(key: string): boolean {
+    return this.registry._get(key)?.expanded ?? false;
+  }
+
+  /** Key of the expanded container, if any. */
+  getExpandedContainer(): string | null {
+    for (const record of this.registry._all()) if (record.expanded) return record.key;
+    return null;
+  }
+
+  /**
+   * Expands a container, restoring the one that was expanded. Ignored when the container
+   * is closed or has `expand: false`.
+   */
+  expandContainer(key: string): void {
+    const record = this.registry.assertExists(key);
+    if (record.expanded || !record.open || record.options.expand === false) return;
+    const current = this.getExpandedContainer();
+    if (current) this.restoreContainer(current);
+    this.setExpanded(record, true);
+  }
+
+  restoreContainer(key: string): void {
+    const record = this.registry.assertExists(key);
+    if (record.expanded) this.setExpanded(record, false);
   }
 
   // ---------------------------------------------------------------- opening
@@ -352,15 +393,28 @@ export class SplitWindowController<
     }
     ref._settle(kind, value); // closed/dismissed: before destroying
     if (neighbor) this.activateRef(neighbor);
-    this.engine.destroy(state.handle);
-    state.handle = undefined;
-    ref._finish(); // hidden: after destroying
-    if (record && stack) {
-      if (stack.size === 0 && record.closeWhenEmpty && !this.removing.has(record)) {
-        this.closeContainer(record);
-      }
-      this.emitChange(record.key);
+    // The last tab of a `closeWhenEmpty` container: hide the container first, so an animated
+    // engine keeps the tab visible while the container leaves and destroys it at the end.
+    // Checked after `_settle`: a `closed` handler may have opened another tab here.
+    if (
+      record &&
+      stack &&
+      stack.size === 0 &&
+      record.closeWhenEmpty &&
+      !this.removing.has(record)
+    ) {
+      this.closeContainer(record);
     }
+    const handle = state.handle;
+    state.handle = undefined;
+    const destroyed = this.engine.destroy(handle);
+    if (isPromiseLike(destroyed)) {
+      const finish = () => ref._finish(); // hidden: after destroying
+      destroyed.then(finish, finish);
+    } else {
+      ref._finish(); // hidden: after destroying
+    }
+    if (record && stack) this.emitChange(record.key);
   }
 
   // ---------------------------------------------------------------- moving
@@ -380,7 +434,7 @@ export class SplitWindowController<
     if (!target) return false;
     if (source === 'drag' && this.dragCancelled) return false;
     if (source === 'drag') {
-      const expanded = this.registry.getExpandedContainer();
+      const expanded = this.getExpandedContainer();
       if (expanded !== null && (ref.containerKey !== expanded || targetKey !== expanded)) {
         return false;
       }
@@ -421,7 +475,7 @@ export class SplitWindowController<
     if (!target || !from?.stack) return false;
     if (source === 'drag') {
       if (this.dragCancelled) return false;
-      const expanded = this.registry.getExpandedContainer();
+      const expanded = this.getExpandedContainer();
       if (expanded !== null && (from.key !== expanded || targetKey !== expanded)) return false;
     }
     const canMove = ref._state.canMove;
@@ -482,7 +536,11 @@ export class SplitWindowController<
       if (neighbor) this.activateRef(neighbor);
     }
     this.activateRef(ref);
-    if (fromStack.size === 0 && from.closeWhenEmpty) this.closeContainer(from);
+    if (fromStack.size === 0 && from.closeWhenEmpty) {
+      // Render the empty source first: a hiding animation must not show the tab that left.
+      this.emitChange(from.key);
+      this.closeContainer(from);
+    }
 
     if (ref.label !== previousLabel) ref._emitTitleChanged();
     ref._emitContainerChanged(from.key, target.key, toIndex);
@@ -535,9 +593,11 @@ export class SplitWindowController<
   /** Completes the observables and stops listening to the registry. */
   destroy(): void {
     this.registrySubscription.unsubscribe();
+    this.engine.disconnect?.();
     this.changesSubject.complete();
     this.tabMovedSubject.complete();
     this.tabRejectedSubject.complete();
+    this.stateSubject.complete();
   }
 
   // ---------------------------------------------------------------- helpers
@@ -545,7 +605,10 @@ export class SplitWindowController<
   private onRegistryEvent(event: RegistryEvent<THost>): void {
     const { record } = event;
     switch (event.type) {
-      case 'removing':
+      case 'registered':
+        this.engine.prepareContainer?.(record);
+        break;
+      case 'removing': {
         this.removing.add(record);
         try {
           for (const ref of [...(record.stack?.tabs ?? [])]) {
@@ -558,20 +621,40 @@ export class SplitWindowController<
           this.engine.unmountContainer(record);
           record.mounted = false;
         }
+        this.engine.releaseContainer?.(record);
         record.stack = null;
+        const changed = record.open || record.expanded;
+        record.open = false;
+        record.expanded = false;
+        if (changed) this.emitState(record);
         break;
-      case 'expanded':
-        if (record.mounted) this.engine.setExpanded(record, event.expanded);
-        if (this.dragging) {
-          this.dragCancelled = true;
-          this.engine.cancelDrag();
-        }
-        this.emitChange(record.key);
-        break;
+      }
       case 'updated':
         this.emitChange(record.key);
         break;
     }
+  }
+
+  private setExpanded(record: ContainerRecord<THost>, expanded: boolean): void {
+    record.expanded = expanded;
+    if (record.mounted) this.engine.setExpanded(record, expanded);
+    if (this.dragging) {
+      this.dragCancelled = true;
+      this.engine.cancelDrag();
+    }
+    this.emitChange(record.key);
+    this.emitState(record);
+  }
+
+  private setOpen(record: ContainerRecord<THost>, open: boolean): void {
+    if (record.open === open) return;
+    if (!open && record.expanded) this.setExpanded(record, false);
+    record.open = open;
+    this.emitState(record);
+  }
+
+  private emitState(record: ContainerRecord<THost>): void {
+    this.stateSubject.next({ key: record.key, open: record.open, expanded: record.expanded });
   }
 
   private moveContext(target: ContainerRecord<THost>, ref: SplitWindowRef): SplitCapacityContext {
@@ -600,13 +683,13 @@ export class SplitWindowController<
 
   private openContainer(record: ContainerRecord<THost>): void {
     if (record.open) return;
-    this.registry._setOpen(record, true);
+    this.setOpen(record, true);
     this.engine.setContainerOpen(record, true);
   }
 
   private closeContainer(record: ContainerRecord<THost>): void {
     if (!record.open) return;
-    this.registry._setOpen(record, false); // restores it first when expanded
+    this.setOpen(record, false); // restores it first when expanded
     this.engine.setContainerOpen(record, false);
   }
 

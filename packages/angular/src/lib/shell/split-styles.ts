@@ -26,6 +26,7 @@ export const SPLIT_WINDOW_STYLES = `
   --split-expanded-z-index: 1050;
   --split-drop-zone-z-index: 1060;
   --split-drag-preview-z-index: 1070;
+  --split-overlay-z-index: 1030;
   --split-shadow: 0 8px 24px rgba(31, 35, 40, 0.18);
 }
 
@@ -203,6 +204,19 @@ split-container.split-drop-target {
 .split-drop-zone .cdk-drag-placeholder { display: none; }
 
 .split-expand-layer { position: static; }
+
+/* Custom containers in push/overlay: the engine sets --split-inset/-w/-h per side. */
+split-container.split-container--custom:not(.split-layout--inline) {
+  position: absolute;
+  inset: var(--split-inset);
+  width: var(--split-w);
+  height: var(--split-h);
+}
+split-container.split-container--custom.split-layout--overlay {
+  z-index: var(--split-overlay-z-index);
+  box-shadow: var(--split-shadow);
+}
+split-container.split-container--leaving .split-content:empty::before { content: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .split-strip.cdk-drop-list-dragging .split-tab, .split-tab.cdk-drag-animating { transition: none; }

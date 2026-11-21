@@ -114,7 +114,41 @@ export interface SplitExpandOptions<THost = unknown> {
   restoreOnEscape?: boolean;
 }
 
+/**
+ * How a container takes space:
+ * - `inline`: the panel fills its host (default of custom containers; invalid on the body).
+ * - `push`: the panel takes space next to the content and pushes it while open.
+ * - `overlay`: the panel floats over the content (default of body containers).
+ */
+export type SplitContainerLayout = 'inline' | 'push' | 'overlay';
+
+/** All layouts, in a stable order. */
+export const SPLIT_CONTAINER_LAYOUTS: readonly SplitContainerLayout[] = [
+  'inline',
+  'push',
+  'overlay',
+];
+
 export interface SplitContainerOptions<THost = unknown> {
+  /**
+   * Display mode. The core only checks its shape (a name, an object or a function); the
+   * adapter resolves it (built-in layouts, registered modes, classes...).
+   */
+  mode?: unknown;
+  /** Open/close animation. The core only checks its shape; the adapter resolves it. */
+  animation?: unknown;
+  /**
+   * Edge the panel docks to in the `push` and `overlay` layouts. Body containers take it
+   * from their key, so it is invalid there. Default: `'right'`.
+   */
+  side?: SplitBodySide;
+  /** Width (left/right) or height (top/bottom) of the panel in `push`/`overlay`: '420px', '30vw'. */
+  size?: string;
+  /**
+   * Element pushed by a body container in the `push` layout. A string is a CSS selector.
+   * Default: the document body.
+   */
+  pushTarget?: THost | string;
   /** Fixed limit, or a function that returns `true` when the container is full for the arriving tab. */
   maxTabs?: number | ((ctx: SplitCapacityContext) => boolean);
   /** What to do when full. Default: `'reject'`. */
@@ -135,10 +169,8 @@ export interface SplitContainerOptions<THost = unknown> {
 
 export interface SplitBodyContainerOptions<THost = unknown> extends Omit<
   SplitContainerOptions<THost>,
-  'closedDropZoneAnchor'
+  'closedDropZoneAnchor' | 'side'
 > {
-  /** Width (left/right) or height (top/bottom): '420px', '30vw'. */
-  size?: string;
   /** Blocks the page behind the container while it is open. Default: `false`. */
   backdrop?: boolean;
 }
@@ -173,7 +205,7 @@ export interface SplitWindowConfig {
   closable: boolean;
   /** Default size of the floating drop panel. */
   closedDropZone: { width: number; height: number };
-  /** Default size of body containers. */
+  /** Default size of body containers and of custom containers in the `overlay` layout. */
   bodySize: string;
   labels: SplitWindowLabels;
 }

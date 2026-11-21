@@ -1,14 +1,26 @@
 # Changelog
 
-Os pacotes `@split-window/core` e `@split-window/angular` saem juntos, com a mesma versão (semver em lockstep).
+Os pacotes `@split-window/core`, `@split-window/css-animation`, `@split-window/keyframes-animation` e `@split-window/angular` saem juntos, com a mesma versão (semver em lockstep).
 
 ## 0.1.0 — não publicada
 
 Primeira versão, implementando a Parte 1 do plano (`split-window-plano.md`).
 
+### Modos, animação e arquitetura
+
+- Layouts `inline`, `push` e `overlay` para qualquer container, com `side`, `size` e `pushTarget`. Modos globais (`modes`, `provideSplitModes`), locais (objeto com `extends` e ganchos), por classe (`SplitContainerMode` e subclasses, criadas com DI) e por função. Classes custom com `hostClass`, `panelClass` e `backdropClass`; `containerDefaults` global e por tipo.
+- Contrato de animação no core (`SplitAnimationEngine`, `SplitAnimationContext`, `SplitAnimationEngineRegistry`, `NoopSplitAnimationEngine`) e `BaseSplitWindowEngine`, que aplica as transições pela engine. Motores registrados por nome (`animationEngines`, `provideSplitAnimationEngines`): sem escolha, vale o primeiro; o noop só sem motores ou com `'none'`, emitindo os eventos de forma síncrona.
+- Novos pacotes `@split-window/css-animation` (classes de estado e `transitionend`, presets injetados) e `@split-window/keyframes-animation` (Web Animations).
+- Com `closeWhenEmpty`, a última aba fica na tela enquanto o container sai e é destruída no fim; `hidden` espera, `closed`/`dismissed` não.
+- O registry passa a guardar só configuração: `expandContainer`, `restoreContainer`, `isContainerOpen`, `isContainerExpanded`, `getExpandedContainer` e `containerStateChanged` ficam no controller e no `SplitWindowManager`. Novo evento `containerTransitions`.
+- Angular: `SplitWindowController` injetável, engine e controller substituíveis por subclasses (`provideSplitWindows({ engine, controller })`); `SplitWindowRuntime` removido.
+- `SplitAnimationEngineRegistry` injetável (substituível com `provideSplitWindows({ animationEngineRegistry })`): motores podem ser registrados a qualquer momento e são resolvidos a cada transição.
+- `AngularSplitEngine` escreve no DOM pelo `Renderer2` (criação, inserção e remoção de elementos, classes, atributos, estilos, `hidden` e o listener de resize da tela cheia). O `SplitStyleStash` recebe um `SplitDomWriter` plugável; o Angular usa `rendererDomWriter`, então os estilos dos modos (`ctx.styles`) também passam pelo renderer.
+- Utilitários compartilhados no core (`isPromiseLike`, `SplitStyleStash`, `toClassList`, `maxCssTime`, `transitionTimeMs`, `reflow`).
+
 ### @split-window/core
 
-- `SplitContainerRegistry`: containers registrados, containers do body (`useBodyContainers`), container padrão, estado aberto/fechado/expandido e `containerStateChanged`.
+- `SplitContainerRegistry`: configuração dos containers (registrados, do body com `useBodyContainers`, container padrão).
 - `SplitWindowController`: abertura com resolução de container e erros explícitos, numeração por grupo + título, políticas de limite (`maxTabs`, `onFull`, `onReject`), `canClose` com `boolean`/`Promise`/`Observable`, `force`, fechar tudo sequencial, movimentação sem destruir (`moveTab`, `canDrop`), restrição de arraste com container expandido e eventos.
 - `SplitWindowRef` com `close`, `dismiss`, `activate`, `moveTo`, `setTitle`, `setClosable`, `setCanClose`, `setCanMove` e os eventos de ciclo de vida e de movimentação.
 - Contrato `SplitWindowEngine` e engine falsa em `@split-window/core/testing`.

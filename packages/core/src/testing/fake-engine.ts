@@ -1,3 +1,4 @@
+import type { SplitWindowController } from '../controller/split-window-controller.js';
 import type { SplitWindowRef } from '../controller/split-window-ref.js';
 import type { SplitWindowEngine } from '../engine/split-window-engine.js';
 import type { ContainerState, TabState } from '../model/types.js';
@@ -44,6 +45,37 @@ export class FakeSplitEngine<TContent = unknown, THost = unknown> implements Spl
   cancelDragCount = 0;
   /** Set to make the next `createTab` throw. */
   failNextCreate: Error | null = null;
+  /**
+   * When `true`, `destroy` returns a promise that stays pending until `finishDestroys()`,
+   * like an engine that keeps the tab visible while its container animates out.
+   */
+  deferDestroy = false;
+  private readonly pendingDestroys: (() => void)[] = [];
+  /** Controller connected through `connect`. */
+  controller: SplitWindowController<TContent, THost, unknown> | null = null;
+  /** Keys given to `prepareContainer` / `releaseContainer`, in order. */
+  readonly prepared: string[] = [];
+  readonly released: string[] = [];
+
+  get connected(): boolean {
+    return this.controller !== null;
+  }
+
+  connect(controller: SplitWindowController<TContent, THost, unknown>): void {
+    this.controller = controller;
+  }
+
+  disconnect(): void {
+    this.controller = null;
+  }
+
+  prepareContainer(container: ContainerState<THost>): void {
+    this.prepared.push(container.key);
+  }
+
+  releaseContainer(container: ContainerState<THost>): void {
+    this.released.push(container.key);
+  }
 
   mountContainer(container: ContainerState<THost>): void {
     this.record('mountContainer', container.key);
@@ -114,12 +146,26 @@ export class FakeSplitEngine<TContent = unknown, THost = unknown> implements Spl
     this.tab(handle).active = false;
   }
 
-  destroy(handle: unknown): void {
+  destroy(handle: unknown): void | Promise<void> {
     this.record('destroy', handle as string);
     const tab = this.tab(handle);
-    tab.destroyed = true;
-    tab.active = false;
-    tab.containerKey = null;
+    const finish = () => {
+      tab.destroyed = true;
+      tab.active = false;
+      tab.containerKey = null;
+    };
+    if (!this.deferDestroy) return finish();
+    return new Promise<void>((resolve) =>
+      this.pendingDestroys.push(() => {
+        finish();
+        resolve();
+      }),
+    );
+  }
+
+  /** Completes the destroys deferred by `deferDestroy`. */
+  finishDestroys(): void {
+    for (const finish of this.pendingDestroys.splice(0)) finish();
   }
 
   setExpanded(container: ContainerState<THost>, expanded: boolean): void {
@@ -147,6 +193,7 @@ export class FakeSplitEngine<TContent = unknown, THost = unknown> implements Spl
 
   reset(): void {
     this.calls.length = 0;
+    this.pendingDestroys.length = 0;
   }
 
   private tab(handle: unknown): FakeTab<TContent> {

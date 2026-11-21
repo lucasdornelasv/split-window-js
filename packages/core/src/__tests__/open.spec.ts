@@ -36,9 +36,9 @@ describe('open', () => {
   });
 
   it('mounts and opens the container on the first tab, then creates, attaches and activates', () => {
-    const { registry, open, engine } = setup();
+    const { registry, open, engine, controller } = setup();
     registry.registerContainer('a', host());
-    expect(registry.isContainerOpen('a')).toBe(false);
+    expect(controller.isContainerOpen('a')).toBe(false);
     const ref = open({ containerKey: 'a' });
     expect(engine.sequence()).toEqual([
       'mountContainer',
@@ -47,7 +47,7 @@ describe('open', () => {
       'setContainerOpen',
       'activate',
     ]);
-    expect(registry.isContainerOpen('a')).toBe(true);
+    expect(controller.isContainerOpen('a')).toBe(true);
     expect(ref.isActive).toBe(true);
     expect(ref.componentInstance).toEqual({ content: 'content' });
     open({ containerKey: 'a' });

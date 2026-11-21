@@ -59,6 +59,54 @@ test.describe('Containers do body', () => {
   });
 });
 
+test.describe('Modos e animação', () => {
+  test('push grows the host and shrinks the content; the last tab stays while it leaves', async ({
+    page,
+  }) => {
+    await gotoPage(page, 'modos');
+    const host = page.locator('[data-host="modo-push"]');
+    const content = host.locator('xpath=preceding-sibling::div[1]');
+    const before = (await content.boundingBox())!.width;
+    expect((await host.boundingBox())!.width).toBe(0);
+    await page.locator('[data-action="open-push"]').click();
+    await expect(container(page, 'modo-push')).toBeVisible();
+    await expect.poll(async () => (await host.boundingBox())!.width).toBe(320);
+    expect((await content.boundingBox())!.width).toBeLessThan(before);
+    // Closing the last tab: the panel animates out with the tab still on screen.
+    await container(page, 'modo-push').locator('.split-tab__close').click();
+    await expect(container(page, 'modo-push')).toHaveClass(/split-container--leaving/);
+    await expect(tabLabels(page, 'modo-push')).toHaveText(['Aba 1']);
+    await expect(container(page, 'modo-push')).toBeHidden();
+    await expect.poll(async () => (await host.boundingBox())!.width).toBe(0);
+  });
+
+  test('overlay floats over the content without taking space', async ({ page }) => {
+    await gotoPage(page, 'modos');
+    const host = page.locator('[data-host="modo-overlay"]');
+    await page.locator('[data-action="open-overlay"]').click();
+    await expect(container(page, 'modo-overlay')).toBeVisible();
+    expect((await host.boundingBox())!.width).toBe(0);
+    await expect
+      .poll(async () => (await container(page, 'modo-overlay').boundingBox())!.width)
+      .toBe(320);
+  });
+
+  test('a body container in push pads the page while open', async ({ page }) => {
+    await gotoPage(page, 'body');
+    await page.locator('[data-config="push"]').click();
+    await page.locator('[data-open-side="right"]').click();
+    await expect(page.locator('.split-body-host--right')).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.body).paddingRight))
+      .toBe('360px');
+    await container(page, 'body-right').locator('.split-tab__close').click();
+    await expect(page.locator('.split-body-host--right')).toBeHidden();
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.body).paddingRight))
+      .toBe('0px');
+  });
+});
+
 test.describe('Abas e numeração', () => {
   test('numbers per group and title, renames and keeps numbers when others close', async ({
     page,
@@ -185,7 +233,7 @@ test.describe('Eventos', () => {
     await expect(log).toContainText('titleChanged Renomeada 2');
     await expect(log).toContainText('containerChanged eventos-a->eventos-b');
     await expect(log).toContainText('manager.tabMoved Renomeada 2 containerChanged');
-    await expect(log).toContainText('registry.containerStateChanged eventos-b open=true');
+    await expect(log).toContainText('manager.containerStateChanged eventos-b open=true');
   });
 });
 

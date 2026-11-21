@@ -6,11 +6,7 @@ import {
   type OnDestroy,
   type OnInit,
 } from '@angular/core';
-import {
-  SplitContainerDirective,
-  SplitContainerRegistry,
-  SplitWindowManager,
-} from '@split-window/angular';
+import { SplitContainerDirective, SplitWindowManager } from '@split-window/angular';
 import { Subscription } from 'rxjs';
 import { DemoExampleComponent } from '../shared/demo-example.component';
 import { NoteTabComponent } from '../shared/tabs';
@@ -75,7 +71,6 @@ manager.tabMoved.subscribe((e) => console.log(e.type, e.fromKey, '->', e.toKey))
 })
 export default class DragPage implements OnInit, OnDestroy {
   private readonly manager = inject(SplitWindowManager);
-  private readonly registry = inject(SplitContainerRegistry);
   private readonly subscription = new Subscription();
   readonly code = CODE;
   readonly log = signal<string[]>([]);
@@ -90,7 +85,7 @@ export default class DragPage implements OnInit, OnDestroy {
       ),
     );
     this.subscription.add(
-      this.registry.containerStateChanged.subscribe((s) =>
+      this.manager.containerStateChanged.subscribe((s) =>
         this.log.update((l) => [...l, `${s.key}: ${s.open ? 'aberto' : 'fechado'}`]),
       ),
     );

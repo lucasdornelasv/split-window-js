@@ -19,7 +19,9 @@ import {
 } from '@angular/cdk/drag-drop';
 import type { SplitContainerView, SplitTabView, SplitWindowRef } from '@split-window/core';
 import { stripListId, type SplitDropListData } from '../engine/angular-split-engine';
-import { SplitWindowRuntime } from '../runtime';
+import { SplitWindowController } from '../controller/split-window-controller';
+import { AngularSplitEngine } from '../engine/angular-split-engine';
+import { SPLIT_WINDOW_CONFIG } from '../tokens';
 import { SPLIT_WINDOW_STYLES } from './split-styles';
 
 /** Tab strip of a container: tabs, close buttons, full screen and close all. */
@@ -116,10 +118,11 @@ import { SPLIT_WINDOW_STYLES } from './split-styles';
   `,
 })
 export class SplitTabStripComponent {
-  private readonly runtime = inject(SplitWindowRuntime);
+  private readonly controller = inject(SplitWindowController);
+  private readonly engine = inject(AngularSplitEngine);
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
-  readonly labels = this.runtime.config.labels;
+  readonly labels = inject(SPLIT_WINDOW_CONFIG).labels;
 
   readonly view = input.required<SplitContainerView<HTMLElement>>();
   readonly dropList = viewChild.required(CdkDropList);
@@ -130,7 +133,7 @@ export class SplitTabStripComponent {
   readonly hasClosableTabs = computed(() => this.view().tabs.some((t) => t.closable));
 
   readonly enterPredicate = (drag: CdkDrag<SplitWindowRef>): boolean =>
-    this.runtime.controller.canDrop(drag.data, this.view().key);
+    this.controller.canDrop(drag.data, this.view().key);
 
   activate(tab: SplitTabView): void {
     tab.ref.activate();
@@ -138,26 +141,26 @@ export class SplitTabStripComponent {
 
   closeTab(event: Event, tab: SplitTabView): void {
     event.stopPropagation();
-    void this.runtime.controller.requestTabClose(tab.ref);
+    void this.controller.requestTabClose(tab.ref);
   }
 
   toggleExpand(): void {
-    const { registry } = this.runtime;
+    const { controller } = this;
     const key = this.view().key;
-    if (registry.isContainerExpanded(key)) registry.restoreContainer(key);
-    else registry.expandContainer(key);
+    if (controller.isContainerExpanded(key)) controller.restoreContainer(key);
+    else controller.expandContainer(key);
   }
 
   closeAll(): void {
-    void this.runtime.controller.dismissAll({ containerKey: this.view().key, reason: 'close-all' });
+    void this.controller.dismissAll({ containerKey: this.view().key, reason: 'close-all' });
   }
 
   onDragStarted(ref: SplitWindowRef): void {
-    this.runtime.engine.startDrag(ref, this.dropList());
+    this.engine.startDrag(ref, this.dropList());
   }
 
   onDrop(event: CdkDragDrop<SplitDropListData, SplitDropListData, SplitWindowRef>): void {
-    this.runtime.engine.handleDrop(event);
+    this.engine.handleDrop(event);
   }
 
   /**
@@ -188,7 +191,7 @@ export class SplitTabStripComponent {
         target = tabs.length - 1;
         break;
       case 'Delete':
-        if (tab.closable) void this.runtime.controller.requestTabClose(tab.ref);
+        if (tab.closable) void this.controller.requestTabClose(tab.ref);
         event.preventDefault();
         return;
       case 'Enter':

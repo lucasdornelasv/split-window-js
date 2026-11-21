@@ -1,0 +1,32 @@
+{
+  "name": "@split-window/keyframes-animation",
+  "version": "0.1.0",
+  "description": "Web Animations (keyframes) engine of SplitWindow.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@split-window/core": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

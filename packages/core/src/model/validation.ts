@@ -1,9 +1,10 @@
 import { SplitInvalidOptionError } from '../errors/errors.js';
-import type {
-  SplitBodyContainerOptions,
-  SplitContainerOptions,
-  SplitExpandOptions,
-  SplitWindowOptions,
+import {
+  SPLIT_BODY_SIDES,
+  type SplitBodyContainerOptions,
+  type SplitContainerOptions,
+  type SplitExpandOptions,
+  type SplitWindowOptions,
 } from './types.js';
 
 const OVERFLOW = ['reject', 'replace-oldest', 'replace-lru', 'replace-same-label'];
@@ -83,9 +84,14 @@ export function validateExpandOptions(
   }
 }
 
+/**
+ * Validates container options. `kind` tells custom containers from body containers, which
+ * take their `side` from the key.
+ */
 export function validateContainerOptions(
   options: SplitContainerOptions<unknown> | SplitBodyContainerOptions<unknown> | undefined,
   prefix = '',
+  kind: 'custom' | 'body' = 'custom',
 ): void {
   if (options === undefined) return;
   if (options === null || typeof options !== 'object') fail(`${prefix}options`, options, 'objeto');
@@ -112,7 +118,33 @@ export function validateContainerOptions(
     optionalNonNegative(p('closedDropZone.height'), closedDropZone.height);
   }
   validateExpandOptions(options.expand);
-  const body = options as SplitBodyContainerOptions<unknown>;
-  optionalString(p('size'), body.size, false);
-  optionalBoolean(p('backdrop'), body.backdrop);
+  const all = options as SplitContainerOptions<unknown> & SplitBodyContainerOptions<unknown>;
+  optionalString(p('size'), all.size, false);
+  if (all.side !== undefined) {
+    if (kind === 'body') {
+      fail(p('side'), all.side, 'ausente: o lado de um container do body vem da chave');
+    }
+    if (!SPLIT_BODY_SIDES.includes(all.side))
+      fail(p('side'), all.side, SPLIT_BODY_SIDES.join(' | '));
+  }
+  if (typeof all.pushTarget === 'string' && all.pushTarget.trim() === '') {
+    fail(p('pushTarget'), all.pushTarget, 'elemento ou seletor CSS não vazio');
+  }
+  const { mode, animation } = all;
+  if (mode !== undefined) {
+    const ok =
+      (typeof mode === 'string' && mode.trim() !== '') ||
+      typeof mode === 'function' ||
+      (typeof mode === 'object' && mode !== null);
+    if (!ok) fail(p('mode'), mode, 'nome de modo, objeto, classe ou função');
+  }
+  if (animation !== undefined) {
+    const ok =
+      typeof animation === 'boolean' ||
+      (typeof animation === 'string' && animation.trim() !== '') ||
+      typeof animation === 'function' ||
+      (typeof animation === 'object' && animation !== null);
+    if (!ok) fail(p('animation'), animation, 'boolean, preset, objeto, motor ou função');
+  }
+  optionalBoolean(p('backdrop'), all.backdrop);
 }

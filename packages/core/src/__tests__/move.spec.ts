@@ -38,7 +38,7 @@ describe('moveTo / moveTab', () => {
   });
 
   it('moves to another container without destroying, recalculating the number', () => {
-    const { open, controller, labels, engine, registry } = ctx();
+    const { open, controller, labels, engine } = ctx();
     open({ title: 'Contrato' });
     const second = open({ title: 'Contrato' });
     const changed: unknown[] = [];
@@ -62,7 +62,7 @@ describe('moveTo / moveTab', () => {
     });
     expect(engine.callsOf('destroy')).toHaveLength(0);
     expect(engine.tabs.get(second.id)!.containerKey).toBe('b');
-    expect(registry.isContainerOpen('b')).toBe(true);
+    expect(controller.isContainerOpen('b')).toBe(true);
   });
 
   it('the moved tab becomes active in the destination; the source activates the neighbor', () => {
@@ -86,16 +86,31 @@ describe('moveTo / moveTab', () => {
   });
 
   it('closes the source when it becomes empty and has closeWhenEmpty', () => {
-    const { registry, open } = setup();
+    const { registry, open, controller } = setup();
     registry.registerContainer('a', host(), { closeWhenEmpty: true });
     registry.registerContainer('b', host(), { closeWhenEmpty: true });
     const ref = open({ containerKey: 'a' });
     ref.moveTo('b');
-    expect(registry.isContainerOpen('a')).toBe(false);
-    expect(registry.isContainerOpen('b')).toBe(true);
+    expect(controller.isContainerOpen('a')).toBe(false);
+    expect(controller.isContainerOpen('b')).toBe(true);
     ref.moveTo('a');
-    expect(registry.isContainerOpen('a')).toBe(true);
-    expect(registry.isContainerOpen('b')).toBe(false);
+    expect(controller.isContainerOpen('a')).toBe(true);
+    expect(controller.isContainerOpen('b')).toBe(false);
+  });
+
+  it('renders the empty source before hiding it', () => {
+    const { registry, open, controller, engine } = setup();
+    registry.registerContainer('a', host(), { closeWhenEmpty: true });
+    registry.registerContainer('b', host());
+    const ref = open({ containerKey: 'a' });
+    const log: string[] = [];
+    controller.changes.subscribe((key) => {
+      if (key === 'a')
+        log.push(`${controller.getTabs('a').length}:${engine.containers.get('a')!.open}`);
+    });
+    ref.moveTo('b');
+    expect(log[0]).toBe('0:true');
+    expect(engine.containers.get('a')!.open).toBe(false);
   });
 
   it('mounts the destination on demand', () => {
@@ -156,10 +171,10 @@ describe('moveTo / moveTab', () => {
   });
 
   it('programmatic moves ignore the expanded-container restriction', () => {
-    const { registry, open } = ctx();
+    const { open, controller } = ctx();
     const ref = open();
     open({ containerKey: 'b' });
-    registry.expandContainer('b');
+    controller.expandContainer('b');
     expect(ref.moveTo('b')).toBe(true);
   });
 });
@@ -177,11 +192,11 @@ describe('canDrop and drags', () => {
   });
 
   it('with an expanded container, drags only reorder inside it', () => {
-    const { registry, open, controller } = ctx();
+    const { open, controller } = ctx();
     const inA = open();
     open();
     const inB = open({ containerKey: 'b' });
-    registry.expandContainer('a');
+    controller.expandContainer('a');
     expect(controller.canDrop(inA, 'a')).toBe(true);
     expect(controller.canDrop(inA, 'b')).toBe(false);
     expect(controller.canDrop(inB, 'b')).toBe(false);
@@ -216,13 +231,13 @@ describe('canDrop and drags', () => {
   });
 
   it('changing the expansion during a drag cancels it and ignores the next drop', () => {
-    const { registry, open, controller, engine } = ctx();
+    const { open, controller, engine } = ctx();
     const ref = open();
     open({ containerKey: 'b' });
     controller.beginDrag(ref);
-    registry.expandContainer('b');
+    controller.expandContainer('b');
     expect(engine.cancelDragCount).toBe(1);
-    registry.restoreContainer('b');
+    controller.restoreContainer('b');
     expect(controller.canDrop(ref, 'b')).toBe(false);
     expect(controller.moveTab(ref, 'b', 0, 'drag')).toBe(false);
     controller.endDrag(ref, false);
@@ -246,12 +261,12 @@ describe('canDrop and drags', () => {
 
 describe('expansion with the engine', () => {
   it('calls setExpanded on mounted containers and emits changes', () => {
-    const { registry, open, engine, controller } = ctx();
+    const { open, engine, controller } = ctx();
     open();
     const changes: string[] = [];
     controller.changes.subscribe((k) => changes.push(k));
-    registry.expandContainer('a');
-    registry.restoreContainer('a');
+    controller.expandContainer('a');
+    controller.restoreContainer('a');
     expect(engine.callsOf('setExpanded').map((c) => c.value)).toEqual([true, false]);
     expect(changes).toEqual(['a', 'a']);
   });

@@ -19,4 +19,11 @@ export {
 } from './controller/split-window-controller.js';
 export { isFull, pickReplacement, resolveReject } from './policies/capacity.js';
 export type { SplitWindowEngine, TabHandle } from './engine/split-window-engine.js';
+export {
+  BaseSplitWindowEngine,
+  type SplitContainerTransitionEvent,
+  type SplitTransitionPlan,
+} from './engine/base-split-window-engine.js';
+export * from './animation/animation-engine.js';
 export * from './geometry/geometry.js';
+export * from './utils/index.js';

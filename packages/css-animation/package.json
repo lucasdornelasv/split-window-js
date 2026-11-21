@@ -1,0 +1,32 @@
+{
+  "name": "@split-window/css-animation",
+  "version": "0.1.0",
+  "description": "CSS animation engine of SplitWindow: state classes and transitionend, in the style of ngbRunTransition.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@split-window/core": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,7 +1,12 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "name": "SplitWindow",
-  "entryPoints": ["packages/core/src/index.ts", "packages/core/src/testing/index.ts"],
+  "entryPoints": [
+    "packages/core/src/index.ts",
+    "packages/core/src/testing/index.ts",
+    "packages/css-animation/src/index.ts",
+    "packages/keyframes-animation/src/index.ts"
+  ],
   "tsconfig": "packages/core/tsconfig.json",
   "out": "docs/api",
   "readme": "packages/core/README.md",

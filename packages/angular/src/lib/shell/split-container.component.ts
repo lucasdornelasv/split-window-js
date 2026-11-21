@@ -15,7 +15,9 @@ import { CdkDropList, type CdkDrag, type CdkDragDrop } from '@angular/cdk/drag-d
 import { filter } from 'rxjs';
 import type { SplitContainerView, SplitWindowRef } from '@split-window/core';
 import { contentListId, type SplitDropListData } from '../engine/angular-split-engine';
-import { SplitWindowRuntime } from '../runtime';
+import { SplitWindowController } from '../controller/split-window-controller';
+import { AngularSplitEngine } from '../engine/angular-split-engine';
+import { SPLIT_WINDOW_CONFIG } from '../tokens';
 import { SplitTabStripComponent } from './split-tab-strip.component';
 import { SPLIT_WINDOW_STYLES } from './split-styles';
 
@@ -56,15 +58,17 @@ import { SPLIT_WINDOW_STYLES } from './split-styles';
   `,
 })
 export class SplitContainerComponent implements OnInit {
-  private readonly runtime = inject(SplitWindowRuntime);
+  private readonly controller = inject(SplitWindowController);
+  private readonly engine = inject(AngularSplitEngine);
   private readonly destroyRef = inject(DestroyRef);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly containerKey = input.required<string>();
   readonly view = signal<SplitContainerView<HTMLElement> | null>(null);
   readonly highlight = signal(false);
-  readonly emptyLabel = this.runtime.config.labels.emptyContainer;
+  readonly emptyLabel = inject(SPLIT_WINDOW_CONFIG).labels.emptyContainer;
   private readonly content = viewChild<ElementRef<HTMLElement>>('content');
+  private frozen = false;
 
   readonly contentId = computed(() => contentListId(this.containerKey()));
   readonly contentData = computed<SplitDropListData>(() => ({
@@ -74,16 +78,16 @@ export class SplitContainerComponent implements OnInit {
 
   readonly enterPredicate = (drag: CdkDrag<SplitWindowRef>): boolean =>
     drag.data.containerKey !== this.containerKey() &&
-    this.runtime.controller.canDrop(drag.data, this.containerKey());
+    this.controller.canDrop(drag.data, this.containerKey());
 
   ngOnInit(): void {
     const key = this.containerKey();
-    const { controller, engine } = this.runtime;
+    const { controller, engine } = this;
     this.refresh();
     const subscription = controller.changes.pipe(filter((k) => k === key)).subscribe(() => {
-      this.refresh();
-      const container = this.view()?.container;
-      if (container?.kind === 'body') engine.applyBodyOptions(container);
+      if (!this.frozen) this.refresh();
+      const container = controller.registry._get(key);
+      if (container) engine.applyContainerOptions(container);
     });
     this.destroyRef.onDestroy(() => subscription.unsubscribe());
   }
@@ -95,7 +99,7 @@ export class SplitContainerComponent implements OnInit {
 
   onDrop(event: CdkDragDrop<SplitDropListData, SplitDropListData, SplitWindowRef>): void {
     this.highlight.set(false);
-    this.runtime.engine.handleDrop(event);
+    this.engine.handleDrop(event);
   }
 
   onKeydown(event: KeyboardEvent): void {
@@ -104,11 +108,26 @@ export class SplitContainerComponent implements OnInit {
     const expand = view?.container.options.expand;
     if (!view?.container.expanded || (expand && expand.restoreOnEscape === false)) return;
     event.preventDefault();
-    this.runtime.registry.restoreContainer(view.key);
+    this.controller.restoreContainer(view.key);
     this.host.nativeElement.focus({ preventScroll: true });
   }
 
+  /**
+   * Stops following the container state, keeping what is on screen (used while the
+   * container animates out, so its last tab does not disappear first).
+   */
+  freeze(): void {
+    this.frozen = true;
+  }
+
+  /** Follows the container state again. */
+  unfreeze(): void {
+    if (!this.frozen) return;
+    this.frozen = false;
+    this.refresh();
+  }
+
   private refresh(): void {
-    this.view.set(this.runtime.controller.getContainerView(this.containerKey()));
+    this.view.set(this.controller.getContainerView(this.containerKey()));
   }
 }

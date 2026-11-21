@@ -1,8 +1,12 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, inject } from '@angular/core';
 import { CdkDropList, type CdkDrag, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import type { SplitRect, SplitWindowRef } from '@split-window/core';
-import { floatListId, type SplitDropListData } from '../engine/angular-split-engine';
-import { SplitWindowRuntime } from '../runtime';
+import { SplitWindowController } from '../controller/split-window-controller';
+import {
+  AngularSplitEngine,
+  floatListId,
+  type SplitDropListData,
+} from '../engine/angular-split-engine';
 import { SPLIT_WINDOW_STYLES } from './split-styles';
 
 /** A floating drop zone of a closed container. */
@@ -44,8 +48,9 @@ export interface SplitFloatingZone {
   `,
 })
 export class SplitDropZoneLayerComponent {
-  private readonly runtime = inject(SplitWindowRuntime);
-  readonly zones = this.runtime.engine.floatingZones;
+  private readonly controller = inject(SplitWindowController);
+  private readonly engine = inject(AngularSplitEngine);
+  readonly zones = this.engine.floatingZones;
   private readonly predicates = new Map<string, (drag: CdkDrag<SplitWindowRef>) => boolean>();
 
   private readonly dataCache = new Map<string, SplitDropListData>();
@@ -66,13 +71,13 @@ export class SplitDropZoneLayerComponent {
   predicate(key: string): (drag: CdkDrag<SplitWindowRef>) => boolean {
     let fn = this.predicates.get(key);
     if (!fn) {
-      fn = (drag) => this.runtime.controller.canDrop(drag.data, key);
+      fn = (drag) => this.controller.canDrop(drag.data, key);
       this.predicates.set(key, fn);
     }
     return fn;
   }
 
   onDrop(event: CdkDragDrop<SplitDropListData, SplitDropListData, SplitWindowRef>): void {
-    this.runtime.engine.handleDrop(event);
+    this.engine.handleDrop(event);
   }
 }

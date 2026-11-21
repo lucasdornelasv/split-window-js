@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import {
   SplitContainerDirective,
-  SplitContainerRegistry,
   SplitWindowManager,
   type SplitContainerOptions,
 } from '@split-window/angular';
@@ -20,9 +19,9 @@ const CODE = `// default: the whole window
 <div splitContainer="sem-expandir" [splitContainerOptions]="{ expand: false }"></div>
 
 // API
-registry.expandContainer('janela');
-registry.restoreContainer('janela');
-registry.containerStateChanged.subscribe(({ key, expanded }) => ...);`;
+manager.expandContainer('janela');
+manager.restoreContainer('janela');
+manager.containerStateChanged.subscribe(({ key, expanded }) => ...);`;
 
 @Component({
   imports: [DemoExampleComponent, SplitContainerDirective],
@@ -44,7 +43,7 @@ registry.containerStateChanged.subscribe(({ key, expanded }) => ...);`;
           type="button"
           class="demo-button"
           data-action="expand-api"
-          (click)="registry.expandContainer('janela')"
+          (click)="manager.expandContainer('janela')"
         >
           expandContainer('janela')
         </button>
@@ -89,8 +88,7 @@ registry.containerStateChanged.subscribe(({ key, expanded }) => ...);`;
   `,
 })
 export default class FullscreenPage {
-  private readonly manager = inject(SplitWindowManager);
-  readonly registry = inject(SplitContainerRegistry);
+  readonly manager = inject(SplitWindowManager);
   readonly code = CODE;
   readonly areaOptions: SplitContainerOptions = {
     expand: {

@@ -2,11 +2,19 @@ import type { Injector, TemplateRef, Type } from '@angular/core';
 import type {
   SplitBodyContainerOptions as CoreBodyContainerOptions,
   SplitBodyContainersConfig as CoreBodyContainersConfig,
+  SplitBodySide,
   SplitContainerOptions as CoreContainerOptions,
   SplitExpandOptions as CoreExpandOptions,
+  SplitWindowConfigInput,
   SplitWindowOptions as CoreWindowOptions,
 } from '@split-window/core';
 import type { SplitActiveWindow } from './active-window/split-active-window';
+import type { SplitAnimationInput } from './animation/animation-engine';
+import type { SplitAnimationEngineRegistry } from './animation/split-animation-engine-registry';
+import type { SplitWindowController } from './controller/split-window-controller';
+import type { AngularSplitEngine } from './engine/angular-split-engine';
+import type { SplitClassInput, SplitModeInput, SplitModeSettings } from './modes/container-mode';
+import type { SplitAnimationEngineEntry } from './tokens';
 
 /** What `open()` accepts. */
 export type SplitContent<T = unknown> = Type<T> | TemplateRef<any>;
@@ -34,7 +42,74 @@ export interface SplitAngularTabOptions {
   injector?: Injector;
 }
 
-export type SplitContainerOptions = CoreContainerOptions<HTMLElement>;
-export type SplitBodyContainerOptions = CoreBodyContainerOptions<HTMLElement>;
-export type SplitBodyContainersConfig = CoreBodyContainersConfig<HTMLElement>;
+/** Display options of a container, resolved by the Angular engine. */
+export interface SplitContainerDisplayOptions {
+  /**
+   * Display mode: `'inline'` (default of custom containers), `'push'`, `'overlay'` (default
+   * of body containers), a mode registered in `provideSplitWindows({ modes })`, an object,
+   * a class extending `SplitContainerMode`, an instance or a function.
+   */
+  mode?: SplitModeInput;
+  /** Open/close animation. Default: off (or `containerDefaults.animation`). */
+  animation?: SplitAnimationInput;
+  /** Classes of the host (the app element, or the fixed host of a body container). */
+  hostClass?: SplitClassInput;
+  /** Classes of the `split-container` element. */
+  panelClass?: SplitClassInput;
+  /** Classes of the backdrop. */
+  backdropClass?: SplitClassInput;
+}
+
+export type SplitContainerOptions = Omit<CoreContainerOptions<HTMLElement>, 'mode' | 'animation'> &
+  SplitContainerDisplayOptions;
+
+export type SplitBodyContainerOptions = Omit<
+  CoreBodyContainerOptions<HTMLElement>,
+  'mode' | 'animation'
+> &
+  SplitContainerDisplayOptions;
+
+export interface SplitBodyContainersConfig extends Omit<
+  CoreBodyContainersConfig<HTMLElement>,
+  'defaults' | SplitBodySide
+> {
+  /** Applies to every enabled side. */
+  defaults?: SplitBodyContainerOptions;
+  left?: boolean | SplitBodyContainerOptions;
+  right?: boolean | SplitBodyContainerOptions;
+  top?: boolean | SplitBodyContainerOptions;
+  bottom?: boolean | SplitBodyContainerOptions;
+}
+
 export type SplitExpandOptions = CoreExpandOptions<HTMLElement>;
+
+/** Global display defaults: a mode and settings, overridden by the mode and the container. */
+export interface SplitContainerDefaults extends SplitModeSettings {
+  mode?: SplitModeInput;
+}
+
+/** `containerDefaults` of `provideSplitWindows()`: for every container, then per kind. */
+export interface SplitContainerDefaultsConfig extends SplitContainerDefaults {
+  custom?: SplitContainerDefaults;
+  body?: SplitContainerDefaults;
+}
+
+/** Config of `provideSplitWindows()`. */
+export interface SplitWindowAngularConfig extends SplitWindowConfigInput {
+  /** Named modes, used as `mode: '<name>'`. */
+  modes?: Record<string, SplitModeInput>;
+  /** Display defaults of the containers (mode, animation, classes...). */
+  containerDefaults?: SplitContainerDefaultsConfig;
+  /**
+   * Named animation engines, in order. An animated container without `animation.engine`
+   * uses the first one; the noop engine is used only when none is registered or
+   * `engine: 'none'` is chosen.
+   */
+  animationEngines?: Record<string, SplitAnimationEngineEntry>;
+  /** A subclass of `SplitAnimationEngineRegistry` to use instead of it. */
+  animationEngineRegistry?: Type<SplitAnimationEngineRegistry>;
+  /** A subclass of `AngularSplitEngine` to use instead of it. */
+  engine?: Type<AngularSplitEngine>;
+  /** A subclass of `SplitWindowController` to use instead of it. */
+  controller?: Type<SplitWindowController>;
+}

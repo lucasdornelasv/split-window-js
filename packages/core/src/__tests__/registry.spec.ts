@@ -21,7 +21,6 @@ describe('SplitContainerRegistry', () => {
     const r = new SplitContainerRegistry<Host>();
     r.registerContainer('a', host());
     expect(r.hasContainer('a')).toBe(true);
-    expect(r.isContainerOpen('a')).toBe(false);
     r.unregisterContainer('a');
     expect(r.hasContainer('a')).toBe(false);
     r.unregisterContainer('missing'); // no-op
@@ -62,6 +61,30 @@ describe('SplitContainerRegistry', () => {
     expect(() => r.useBodyContainers({ right: { size: '' } })).toThrow(/right.size/);
     expect(() => r.useBodyContainers({ right: 5 as never })).toThrow(/right/);
     expect(() => r.useBodyContainers({ defaults: { maxTabs: -1 } })).toThrow(/defaults.maxTabs/);
+  });
+
+  it('validates layout options: side, size, pushTarget, mode and animation', () => {
+    const r = new SplitContainerRegistry<Host>();
+    expect(() => r.registerContainer('a', host(), { side: 'middle' as never })).toThrow(/side/);
+    expect(() => r.registerContainer('a', host(), { size: ' ' })).toThrow(/size/);
+    expect(() => r.registerContainer('a', host(), { pushTarget: '' })).toThrow(/pushTarget/);
+    expect(() => r.registerContainer('a', host(), { mode: '' })).toThrow(/mode/);
+    expect(() => r.registerContainer('a', host(), { mode: 5 })).toThrow(/mode/);
+    expect(() => r.registerContainer('a', host(), { animation: 0 })).toThrow(/animation/);
+    expect(() => r.useBodyContainers({ right: { side: 'left' } as never })).toThrow(/right.side/);
+    expect(() => r.useBodyContainers({ defaults: { side: 'left' } as never, right: true })).toThrow(
+      /defaults.side/,
+    );
+    r.registerContainer('ok', host(), {
+      mode: 'push',
+      side: 'left',
+      size: '30vw',
+      pushTarget: '#app',
+      animation: { duration: 300 },
+    });
+    r.registerContainer('fn', host(), { mode: () => 'overlay', animation: false });
+    r.useBodyContainers({ right: { mode: { layout: 'push' }, animation: 'slide' } });
+    expect(r.getContainerKeys()).toEqual(['ok', 'fn', 'body-right']);
   });
 
   describe('default container', () => {
@@ -222,68 +245,100 @@ describe('SplitContainerRegistry', () => {
     });
   });
 
-  describe('expansion and state', () => {
-    it('expands only open containers that allow it, one at a time', () => {
-      const { registry, open } = setup();
-      registry.registerContainer('a', host());
-      registry.registerContainer('b', host());
-      registry.registerContainer('c', host(), { expand: false });
-      const states: unknown[] = [];
-      registry.containerStateChanged.subscribe((s) => states.push(s));
-
-      registry.expandContainer('a'); // closed: ignored
-      expect(registry.isContainerExpanded('a')).toBe(false);
-
-      open({ containerKey: 'a' });
-      open({ containerKey: 'b' });
-      open({ containerKey: 'c' });
-      registry.expandContainer('c'); // expand: false
-      expect(registry.isContainerExpanded('c')).toBe(false);
-
-      registry.expandContainer('a');
-      registry.expandContainer('a'); // already expanded
-      registry.expandContainer('b');
-      expect(registry.isContainerExpanded('a')).toBe(false);
-      expect(registry.getExpandedContainer()).toBe('b');
-      registry.restoreContainer('b');
-      registry.restoreContainer('b');
-      expect(registry.getExpandedContainer()).toBeNull();
-      expect(states).toEqual([
-        { key: 'a', open: true, expanded: false },
-        { key: 'b', open: true, expanded: false },
-        { key: 'c', open: true, expanded: false },
-        { key: 'a', open: true, expanded: true },
-        { key: 'a', open: true, expanded: false },
-        { key: 'b', open: true, expanded: true },
-        { key: 'b', open: true, expanded: false },
-      ]);
+  it('emits registered for new containers and destroy completes the events', () => {
+    const r = new SplitContainerRegistry<Host>();
+    const events: string[] = [];
+    r._events.subscribe({
+      next: (e) => events.push(`${e.type}:${e.record.key}`),
+      complete: () => events.push('complete'),
     });
+    r.registerContainer('a', host());
+    r.useBodyContainers({ right: true });
+    r.useBodyContainers({ right: { label: 'R' } });
+    r.unregisterContainer('a');
+    r.destroy();
+    expect(events).toEqual([
+      'registered:a',
+      'registered:body-right',
+      'updated:body-right',
+      'removing:a',
+      'complete',
+    ]);
+  });
+});
 
-    it('unknown keys throw on expand/restore', () => {
-      const r = new SplitContainerRegistry<Host>();
-      expect(() => r.expandContainer('x')).toThrow(SplitContainerNotFoundError);
-      expect(() => r.restoreContainer('x')).toThrow(SplitContainerNotFoundError);
-      expect(r.isContainerExpanded('x')).toBe(false);
-      expect(r.isContainerOpen('x')).toBe(false);
-    });
+describe('container state (controller)', () => {
+  it('expands only open containers that allow it, one at a time', () => {
+    const { registry, open, controller } = setup();
+    registry.registerContainer('a', host());
+    registry.registerContainer('b', host());
+    registry.registerContainer('c', host(), { expand: false });
+    const states: unknown[] = [];
+    controller.containerStateChanged.subscribe((s) => states.push(s));
 
-    it('unregistering an open expanded container emits a final state', () => {
-      const { registry, open } = setup();
-      registry.registerContainer('a', host());
-      open({ containerKey: 'a' });
-      registry.expandContainer('a');
-      const states: unknown[] = [];
-      registry.containerStateChanged.subscribe((s) => states.push(s));
-      registry.unregisterContainer('a');
-      expect(states.at(-1)).toEqual({ key: 'a', open: false, expanded: false });
-    });
+    controller.expandContainer('a'); // closed: ignored
+    expect(controller.isContainerExpanded('a')).toBe(false);
 
-    it('destroy completes the observables', () => {
-      const r = new SplitContainerRegistry<Host>();
-      let completed = false;
-      r.containerStateChanged.subscribe({ complete: () => (completed = true) });
-      r.destroy();
-      expect(completed).toBe(true);
-    });
+    open({ containerKey: 'a' });
+    open({ containerKey: 'b' });
+    open({ containerKey: 'c' });
+    controller.expandContainer('c'); // expand: false
+    expect(controller.isContainerExpanded('c')).toBe(false);
+
+    controller.expandContainer('a');
+    controller.expandContainer('a'); // already expanded
+    controller.expandContainer('b');
+    expect(controller.isContainerExpanded('a')).toBe(false);
+    expect(controller.getExpandedContainer()).toBe('b');
+    controller.restoreContainer('b');
+    controller.restoreContainer('b');
+    expect(controller.getExpandedContainer()).toBeNull();
+    expect(states).toEqual([
+      { key: 'a', open: true, expanded: false },
+      { key: 'b', open: true, expanded: false },
+      { key: 'c', open: true, expanded: false },
+      { key: 'a', open: true, expanded: true },
+      { key: 'a', open: true, expanded: false },
+      { key: 'b', open: true, expanded: true },
+      { key: 'b', open: true, expanded: false },
+    ]);
+  });
+
+  it('unknown keys throw on expand/restore', () => {
+    const { controller } = setup();
+    expect(() => controller.expandContainer('x')).toThrow(SplitContainerNotFoundError);
+    expect(() => controller.restoreContainer('x')).toThrow(SplitContainerNotFoundError);
+    expect(controller.isContainerExpanded('x')).toBe(false);
+    expect(controller.isContainerOpen('x')).toBe(false);
+  });
+
+  it('unregistering an open expanded container emits a final state', () => {
+    const { registry, open, controller } = setup();
+    registry.registerContainer('a', host());
+    open({ containerKey: 'a' });
+    controller.expandContainer('a');
+    const states: unknown[] = [];
+    controller.containerStateChanged.subscribe((s) => states.push(s));
+    registry.unregisterContainer('a');
+    expect(states.at(-1)).toEqual({ key: 'a', open: false, expanded: false });
+  });
+
+  it('destroy completes the observables and disconnects the engine', () => {
+    const { controller, engine } = setup();
+    let completed = false;
+    controller.containerStateChanged.subscribe({ complete: () => (completed = true) });
+    controller.destroy();
+    expect(completed).toBe(true);
+    expect(engine.connected).toBe(false);
+  });
+
+  it('connects the engine and prepares registered containers', () => {
+    const { registry, engine, controller } = setup();
+    expect(engine.connected).toBe(true);
+    expect(engine.controller).toBe(controller);
+    registry.registerContainer('a', host());
+    expect(engine.prepared).toEqual(['a']);
+    registry.unregisterContainer('a');
+    expect(engine.released).toEqual(['a']);
   });
 });

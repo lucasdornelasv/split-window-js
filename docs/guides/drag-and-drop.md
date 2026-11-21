@@ -42,7 +42,7 @@ manager.tabMoved.subscribe((e) => console.log(e.type, e.fromKey, '->', e.toKey))
 - Só a área do título arrasta; o botão de fechar e o conteúdo não iniciam arraste.
 - **Teclado:** `Ctrl+Shift+←/→` reordena dentro da barra. Mover para outro container pelo teclado ainda não existe; use `moveTo()`.
 - **Fora do Chromium:** sem `Element.moveBefore()` (Chrome 133+), o fallback é `appendChild`: iframes recarregam, vídeos reiniciam e o foco se perde ao mover.
-- Eventos: `dragStarted`, `dragEnded`, `reordered` e `containerChanged` na ref; `tabMoved` no manager; `containerStateChanged` no registry.
+- Eventos: `dragStarted`, `dragEnded`, `reordered` e `containerChanged` na ref; `tabMoved` no manager; `containerStateChanged` no manager.
 
 ## Links
 
