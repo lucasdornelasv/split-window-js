@@ -1,6 +1,6 @@
 {
   "name": "@split-window/keyframes-animation",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Web Animations (keyframes) engine of SplitWindow.",
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@split-window/core": "0.3.0"
+    "@split-window/core": "0.4.0"
   },
   "publishConfig": {
     "access": "public"

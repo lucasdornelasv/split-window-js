@@ -200,7 +200,17 @@ provideSplitWindows({
     emptyContainer: 'No open tabs',
   },
 });
+
+// or a factory, run once in an injection context (inject() works)
+provideSplitWindows({
+  labels: () => {
+    const t = inject(TranslationService);
+    return { defaultTitle: t.instant('tabs.new'), closeTab: t.instant('tabs.close') };
+  },
+});
 ```
+
+A factory roda uma vez, quando o config é injetado pela primeira vez; os textos não mudam depois disso. Se ela não devolver um objeto, lança `SplitInvalidOptionError`.
 
 | Chave de `labels` | Padrão                   | Onde aparece                   |
 | ----------------- | ------------------------ | ------------------------------ |

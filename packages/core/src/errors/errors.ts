@@ -27,12 +27,16 @@ export class SplitContainerNotFoundError extends SplitWindowError {
   }
 }
 
-/** No `containerKey` was given and there is no default container. */
+/**
+ * No `containerKey` was given and there is no default container. Since the first configured
+ * container is the automatic default, this only happens while no container is configured.
+ */
 export class SplitNoDefaultContainerError extends SplitWindowError {
   constructor(readonly availableKeys: readonly string[]) {
     super(
-      'Nenhum container padrão configurado. Informe containerKey no open() ou defina um padrão ' +
-        'com setDefaultContainer() ou useBodyContainers().',
+      'Nenhum container padrão configurado. Registre um container (registerContainer() ou a ' +
+        'diretiva splitContainer) ou habilite os containers do body com useBodyContainers() ' +
+        'antes do open().',
     );
   }
 }

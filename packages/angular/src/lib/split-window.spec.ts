@@ -21,6 +21,8 @@ import {
   SplitWindowManager,
   provideSplitWindows,
   SplitContainerNotFoundError,
+  SPLIT_WINDOW_CONFIG,
+  DEFAULT_SPLIT_WINDOW_CONFIG,
   type SplitWindowRef,
 } from '../public-api';
 import {
@@ -150,6 +152,96 @@ describe('@split-window/angular', () => {
 
     it('manager.registry is the injectable singleton', () => {
       expect(manager.registry).toBe(registry);
+    });
+
+    it('containerDefaults pre-configures the behavior of every container, below its options', () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideSplitWindows({
+            containerDefaults: {
+              maxTabs: 3,
+              onFull: 'replace-oldest',
+              expand: false,
+              size: '200px', // display: stays with the mode resolver
+              custom: { closeWhenEmpty: true },
+              body: { maxTabs: 6, backdrop: true },
+            },
+          }),
+        ],
+      });
+      const reg = TestBed.inject(SplitContainerRegistry);
+      reg.registerContainer('a', document.createElement('div'));
+      reg.registerContainer('b', document.createElement('div'), { maxTabs: 1 });
+      reg.useBodyContainers();
+      reg.useBodyContainers({ left: { maxTabs: 2 }, right: true, defaults: { onFull: 'reject' } });
+      expect(reg._get('a')!.options).toEqual({
+        maxTabs: 3,
+        onFull: 'replace-oldest',
+        expand: false,
+        closeWhenEmpty: true,
+      });
+      expect(reg._get('b')!.options).toMatchObject({ maxTabs: 1, closeWhenEmpty: true });
+      expect(reg._get('body-left')!.options).toMatchObject({
+        maxTabs: 2,
+        onFull: 'reject',
+        backdrop: true,
+        expand: false,
+      });
+      expect(reg._get('body-right')!.options).toMatchObject({ maxTabs: 6, onFull: 'reject' });
+    });
+
+    it('labels accepts an object or a factory run once in an injection context', () => {
+      const LABEL = new InjectionToken<string>('LABEL');
+      let runs = 0;
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          { provide: LABEL, useValue: 'Nova aba' },
+          provideSplitWindows({
+            bodySize: '300px',
+            labels: () => {
+              runs++;
+              return { defaultTitle: inject(LABEL) };
+            },
+          }),
+        ],
+      });
+      const config = TestBed.inject(SPLIT_WINDOW_CONFIG);
+      expect(config.labels.defaultTitle).toBe('Nova aba');
+      expect(config.labels.closeAll).toBe(DEFAULT_SPLIT_WINDOW_CONFIG.labels.closeAll);
+      expect(config.bodySize).toBe('300px');
+      TestBed.inject(SPLIT_WINDOW_CONFIG);
+      expect(runs).toBe(1);
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [provideSplitWindows({ labels: { closeTab: 'Fechar' } })],
+      });
+      expect(TestBed.inject(SPLIT_WINDOW_CONFIG).labels.closeTab).toBe('Fechar');
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [provideSplitWindows({ labels: () => null as never })],
+      });
+      expect(() => TestBed.inject(SPLIT_WINDOW_CONFIG)).toThrow(/labels/);
+    });
+
+    it('containerDefaults is validated', () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [provideSplitWindows({ containerDefaults: { maxTabs: 0 } })],
+      });
+      expect(() => TestBed.inject(SplitContainerRegistry)).toThrow(/containerDefaults.maxTabs/);
+    });
+
+    it('without an explicit default, open() uses the first configured container', () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [provideSplitWindows()] });
+      const reg = TestBed.inject(SplitContainerRegistry);
+      reg.useBodyContainers({ left: true, right: true });
+      expect(reg.hasExplicitDefaultContainer()).toBe(false);
+      expect(TestBed.inject(SplitWindowManager).open(TabComponent).containerKey).toBe('body-left');
     });
 
     it('the registry can be used without the manager', () => {

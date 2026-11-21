@@ -2,7 +2,7 @@
 
 O SplitWindow não cai num container em silêncio: cada situação de configuração tem o seu erro, com uma mensagem em português que diz o que configurar, e os dados da mensagem expostos como propriedades. Todos estendem `SplitWindowError` (e `Error`), têm `name` igual ao nome da classe e são exportados por `@split-window/angular` e `@split-window/core`.
 
-A resolução de container segue `options.containerKey ?? padrão`: chave informada e desconhecida lança `SplitContainerNotFoundError`; sem chave e sem padrão, `SplitNoDefaultContainerError`. Opções são validadas no registro e na abertura, e um valor inválido lança `SplitInvalidOptionError` com o nome da opção e o valor recebido.
+A resolução de container segue `options.containerKey ?? padrão`: chave informada e desconhecida lança `SplitContainerNotFoundError`; sem chave, vale o padrão (o explícito, ou o primeiro container configurado), e `SplitNoDefaultContainerError` só acontece quando nenhum container está configurado. Opções são validadas no registro e na abertura, e um valor inválido lança `SplitInvalidOptionError` com o nome da opção e o valor recebido.
 
 ## Exemplo
 
@@ -16,22 +16,22 @@ try {
 }
 
 // SplitContainerNotFoundError   unknown key, or a body side that is not enabled
-// SplitNoDefaultContainerError  no containerKey and no default container
+// SplitNoDefaultContainerError  no containerKey and no container configured
 // SplitContainerFullError       tab limit with onReject: 'throw'
 // SplitReservedContainerKeyError registerContainer('body-left', ...)
 // SplitDuplicateContainerError  key already registered
 // SplitInvalidOptionError       invalid option value
 ```
 
-| Erro                             | Quando                                                                                     | Propriedades                                        | Mensagem (exemplo)                                                                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `SplitContainerNotFoundError`    | `containerKey` sem container; `moveTo()` ou `setDefaultContainer()` com chave desconhecida | `containerKey`, `availableKeys`, `bodySideDisabled` | Nenhum container configurado com a chave 'contratos'. Containers disponíveis: body-right, esquerdo.                                       |
-| `SplitContainerNotFoundError`    | Lado do body não habilitado                                                                | idem, `bodySideDisabled: true`                      | O container 'body-left' não está habilitado. Habilite-o com useBodyContainers().                                                          |
-| `SplitNoDefaultContainerError`   | `open()` sem `containerKey` e sem padrão                                                   | `availableKeys`                                     | Nenhum container padrão configurado. Informe containerKey no open() ou defina um padrão com setDefaultContainer() ou useBodyContainers(). |
-| `SplitContainerFullError`        | Limite com `onReject: 'throw'`, ou cadeia de redirecionamento esgotada                     | `containerKey`, `triedKeys`                         | O container 'limitado' está cheio. Containers tentados: limitado.                                                                         |
-| `SplitReservedContainerKeyError` | `registerContainer`/`unregisterContainer` com chave `body-*`                               | `containerKey`                                      | A chave 'body-top' é reservada para os containers do body. Use useBodyContainers() ou escolha outra chave.                                |
-| `SplitDuplicateContainerError`   | `registerContainer` com chave já registrada                                                | `containerKey`                                      | Já existe um container registrado com a chave 'x'. Para trocar o host, desregistre o container antes.                                     |
-| `SplitInvalidOptionError`        | Opção com valor inválido                                                                   | `option`, `value`                                   | Valor inválido para 'maxTabs': 0. Esperado: inteiro maior que zero ou função.                                                             |
+| Erro                             | Quando                                                                                     | Propriedades                                        | Mensagem (exemplo)                                                                                                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SplitContainerNotFoundError`    | `containerKey` sem container; `moveTo()` ou `setDefaultContainer()` com chave desconhecida | `containerKey`, `availableKeys`, `bodySideDisabled` | Nenhum container configurado com a chave 'contratos'. Containers disponíveis: body-right, esquerdo.                                                                                      |
+| `SplitContainerNotFoundError`    | Lado do body não habilitado                                                                | idem, `bodySideDisabled: true`                      | O container 'body-left' não está habilitado. Habilite-o com useBodyContainers().                                                                                                         |
+| `SplitNoDefaultContainerError`   | `open()` sem `containerKey` e sem nenhum container configurado                             | `availableKeys`                                     | Nenhum container padrão configurado. Registre um container (registerContainer() ou a diretiva splitContainer) ou habilite os containers do body com useBodyContainers() antes do open(). |
+| `SplitContainerFullError`        | Limite com `onReject: 'throw'`, ou cadeia de redirecionamento esgotada                     | `containerKey`, `triedKeys`                         | O container 'limitado' está cheio. Containers tentados: limitado.                                                                                                                        |
+| `SplitReservedContainerKeyError` | `registerContainer`/`unregisterContainer` com chave `body-*`                               | `containerKey`                                      | A chave 'body-top' é reservada para os containers do body. Use useBodyContainers() ou escolha outra chave.                                                                               |
+| `SplitDuplicateContainerError`   | `registerContainer` com chave já registrada                                                | `containerKey`                                      | Já existe um container registrado com a chave 'x'. Para trocar o host, desregistre o container antes.                                                                                    |
+| `SplitInvalidOptionError`        | Opção com valor inválido                                                                   | `option`, `value`                                   | Valor inválido para 'maxTabs': 0. Esperado: inteiro maior que zero ou função.                                                                                                            |
 
 ## Regras
 

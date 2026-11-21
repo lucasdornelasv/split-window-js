@@ -42,6 +42,9 @@ export type {
   SplitExpandOptions,
   SplitContainerDefaults,
   SplitContainerDefaultsConfig,
+  SplitContainerBehaviorDefaults,
+  SplitLabelsInput,
+  SplitBodyContainerDefaults,
   SplitWindowAngularConfig,
 } from './lib/types';
 

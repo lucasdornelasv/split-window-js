@@ -2,6 +2,12 @@
 
 Os pacotes `@split-window/core`, `@split-window/css-animation`, `@split-window/keyframes-animation` e `@split-window/angular` saem juntos, com a mesma versão (semver em lockstep).
 
+## 0.4.0 — 2026-11-21
+
+- Container padrão automático: sem um padrão explícito (`setDefaultContainer`, `splitContainerDefault` ou `default` de `useBodyContainers`), o `open()` sem `containerKey` usa o primeiro container configurado. Desregistrar o padrão ou `setDefaultContainer(null)` voltam a esse padrão automático, e `SplitNoDefaultContainerError` só acontece sem nenhum container. `getDefaultContainer()` devolve o padrão em vigor; novo `hasExplicitDefaultContainer()`.
+- `provideSplitWindows({ containerDefaults })` pré-configura os containers: `maxTabs`, `onFull`, `onReject`, `closeWhenEmpty`, `closedDropZone` e `expand` (e `backdrop` no body) entram nas opções de cada container ao registrar, abaixo das opções dele, com `containerDefaults.custom`/`.body` por tipo. Valores inválidos lançam `SplitInvalidOptionError` com o prefixo `containerDefaults.`.
+- `provideSplitWindows({ labels })` aceita um objeto ou uma factory executada uma vez num contexto de injeção (`labels: () => ({ defaultTitle: inject(Traducoes).novaAba })`). Novo tipo `SplitLabelsInput`.
+
 ## 0.3.0 — 2026-11-21
 
 ### Mudanças que quebram compatibilidade

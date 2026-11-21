@@ -156,7 +156,7 @@ describe('close and dismiss', () => {
     await expect(ref.result).rejects.toBe('container-removed');
     expect(guard).not.toHaveBeenCalled();
     expect(engine.containers.get('a')!.mounted).toBe(false);
-    expect(registry.getDefaultContainer()).toBeNull();
+    expect(registry.getDefaultContainer()).toBeNull(); // no container left
   });
 });
 

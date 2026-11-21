@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { SplitContainerRegistry, SplitWindowManager } from '@split-window/angular';
+import { SplitContainerRegistry as CoreSplitContainerRegistry } from '@split-window/core';
 import { DemoExampleComponent } from '../shared/demo-example.component';
 import { NoteTabComponent } from '../shared/tabs';
 
@@ -12,7 +13,7 @@ const CODE = `try {
 }
 
 // SplitContainerNotFoundError   unknown key, or a body side that is not enabled
-// SplitNoDefaultContainerError  no containerKey and no default container
+// SplitNoDefaultContainerError  no containerKey and no container configured
 // SplitContainerFullError       tab limit with onReject: 'throw'
 // SplitReservedContainerKeyError registerContainer('body-left', ...)
 // SplitDuplicateContainerError  key already registered
@@ -69,16 +70,10 @@ export default class ErrorsPage {
     },
     {
       id: 'no-default',
-      label: 'Sem container padrão',
-      run: () => {
-        const previous = this.registry.getDefaultContainer();
-        this.registry.setDefaultContainer(null);
-        try {
-          return this.manager.open(NoteTabComponent);
-        } finally {
-          this.registry.setDefaultContainer(previous);
-        }
-      },
+      label: 'Nenhum container configurado',
+      // The first configured container is the automatic default, so this error only
+      // happens with no container at all: an empty registry of the core shows it.
+      run: () => new CoreSplitContainerRegistry<HTMLElement>().resolveKey(),
     },
     {
       id: 'reserved',

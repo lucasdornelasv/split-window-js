@@ -6,6 +6,7 @@ import type {
   SplitContainerOptions as CoreContainerOptions,
   SplitExpandOptions as CoreExpandOptions,
   SplitWindowConfigInput,
+  SplitWindowLabels,
   SplitWindowOptions as CoreWindowOptions,
 } from '@split-window/core';
 import type { SplitActiveWindow } from './active-window/split-active-window';
@@ -82,22 +83,61 @@ export interface SplitBodyContainersConfig extends Omit<
 
 export type SplitExpandOptions = CoreExpandOptions<HTMLElement>;
 
-/** Global display defaults: a mode and settings, overridden by the mode and the container. */
-export interface SplitContainerDefaults extends SplitModeSettings {
+/**
+ * Container options that `containerDefaults` pre-configures: copied into the options of
+ * each container when it is registered, below its own options.
+ */
+export type SplitContainerBehaviorDefaults = Pick<
+  CoreContainerOptions<HTMLElement>,
+  'maxTabs' | 'onFull' | 'onReject' | 'closeWhenEmpty' | 'closedDropZone' | 'expand'
+>;
+
+/**
+ * Global defaults of the containers:
+ * - display (`mode` and its settings): overridden by the mode and by the container;
+ * - behavior (`maxTabs`, `onFull`, `onReject`, `closeWhenEmpty`, `closedDropZone`,
+ *   `expand`): pre-configured on each container when it is registered, overridden by its
+ *   own options.
+ */
+export interface SplitContainerDefaults extends SplitModeSettings, SplitContainerBehaviorDefaults {
   mode?: SplitModeInput;
+}
+
+/** Defaults of body containers: also `backdrop`. */
+export interface SplitBodyContainerDefaults extends SplitContainerDefaults {
+  /** Blocks the page behind the container while it is open. */
+  backdrop?: boolean;
 }
 
 /** `containerDefaults` of `provideSplitWindows()`: for every container, then per kind. */
 export interface SplitContainerDefaultsConfig extends SplitContainerDefaults {
   custom?: SplitContainerDefaults;
-  body?: SplitContainerDefaults;
+  body?: SplitBodyContainerDefaults;
 }
 
+/**
+ * Texts of the library: an object, or a factory that returns it. The factory runs once, in
+ * an injection context, when the config is first injected, so it may use `inject()`:
+ *
+ * ```ts
+ * labels: () => {
+ *   const t = inject(MyTranslations);
+ *   return { defaultTitle: t.get('tab.new'), closeTab: t.get('tab.close') };
+ * }
+ * ```
+ */
+export type SplitLabelsInput = Partial<SplitWindowLabels> | (() => Partial<SplitWindowLabels>);
+
 /** Config of `provideSplitWindows()`. */
-export interface SplitWindowAngularConfig extends SplitWindowConfigInput {
+export interface SplitWindowAngularConfig extends Omit<SplitWindowConfigInput, 'labels'> {
+  /** Texts of the library, or a factory run in an injection context. */
+  labels?: SplitLabelsInput;
   /** Named modes, used as `mode: '<name>'`. */
   modes?: Record<string, SplitModeInput>;
-  /** Display defaults of the containers (mode, animation, classes...). */
+  /**
+   * Defaults of the containers: display (mode, animation, classes...) and behavior
+   * (`maxTabs`, `onFull`, `closeWhenEmpty`...), per kind with `custom`/`body`.
+   */
   containerDefaults?: SplitContainerDefaultsConfig;
   /**
    * Named animation engines, in order. An animated container without `animation.engine`

@@ -7,9 +7,16 @@ import {
 import { host, setup } from './helpers.js';
 
 describe('open', () => {
-  it('without containerKey and without default throws SplitNoDefaultContainerError', () => {
+  it('without containerKey and without any container throws SplitNoDefaultContainerError', () => {
     const { open } = setup();
     expect(() => open()).toThrow(SplitNoDefaultContainerError);
+  });
+
+  it('without containerKey and without an explicit default uses the first container', () => {
+    const { registry, open } = setup();
+    registry.registerContainer('a', host());
+    registry.registerContainer('b', host());
+    expect(open().containerKey).toBe('a');
   });
 
   it('with an unknown containerKey throws, without falling back to the default', () => {

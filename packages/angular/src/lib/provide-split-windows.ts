@@ -1,5 +1,10 @@
 import { makeEnvironmentProviders, type EnvironmentProviders, type Provider } from '@angular/core';
-import { SplitAnimationEngineRegistry, mergeSplitWindowConfig } from '@split-window/core';
+import {
+  SplitAnimationEngineRegistry,
+  SplitInvalidOptionError,
+  mergeSplitWindowConfig,
+  type SplitWindowLabels,
+} from '@split-window/core';
 import { splitAnimationEngineRegistryFactory } from './animation/split-animation-engine-registry';
 import { SplitWindowController } from './controller/split-window-controller';
 import { AngularSplitEngine } from './engine/angular-split-engine';
@@ -25,7 +30,7 @@ import type { SplitWindowAngularConfig } from './types';
  * ```ts
  * providers: [
  *   provideSplitWindows({
- *     labels: { defaultTitle: 'New tab' },
+ *     labels: { defaultTitle: 'New tab' }, // or () => inject(MyTranslations).splitLabels
  *     animationEngines: { css: new SplitCssAnimationEngine() },
  *     modes: { drawer: { extends: 'overlay', panelClass: 'drawer', animation: 'slide' } },
  *     containerDefaults: { animation: true },
@@ -34,7 +39,8 @@ import type { SplitWindowAngularConfig } from './types';
  * ```
  */
 export function provideSplitWindows(config?: SplitWindowAngularConfig): EnvironmentProviders {
-  const { modes, containerDefaults, animationEngines, engine, controller, ...core } = config ?? {};
+  const { modes, containerDefaults, animationEngines, engine, controller, labels, ...core } =
+    config ?? {};
   const providers: Provider[] = [
     SplitContainerRegistry,
     SplitModeResolver,
@@ -42,7 +48,13 @@ export function provideSplitWindows(config?: SplitWindowAngularConfig): Environm
     engine ? { provide: AngularSplitEngine, useClass: engine } : AngularSplitEngine,
     controller ? { provide: SplitWindowController, useClass: controller } : SplitWindowController,
     SplitWindowManager,
-    { provide: SPLIT_WINDOW_CONFIG, useValue: mergeSplitWindowConfig(core) },
+    typeof labels === 'function'
+      ? // Runs in the injection context of the environment injector, on first injection.
+        {
+          provide: SPLIT_WINDOW_CONFIG,
+          useFactory: () => mergeSplitWindowConfig({ ...core, labels: resolveLabels(labels) }),
+        }
+      : { provide: SPLIT_WINDOW_CONFIG, useValue: mergeSplitWindowConfig({ ...core, labels }) },
     { provide: SPLIT_CONTAINER_DEFAULTS, useValue: containerDefaults ?? {} },
   ];
   if (modes) providers.push({ provide: SPLIT_WINDOW_MODES, useValue: modes, multi: true });
@@ -50,6 +62,15 @@ export function provideSplitWindows(config?: SplitWindowAngularConfig): Environm
     providers.push({ provide: SPLIT_ANIMATION_ENGINES, useValue: animationEngines, multi: true });
   }
   return makeEnvironmentProviders(providers);
+}
+
+/** Runs a labels factory and checks that it returned an object. */
+function resolveLabels(factory: () => Partial<SplitWindowLabels>): Partial<SplitWindowLabels> {
+  const labels = factory();
+  if (labels === null || typeof labels !== 'object') {
+    throw new SplitInvalidOptionError('labels', labels, 'objeto com os textos');
+  }
+  return labels;
 }
 
 /**

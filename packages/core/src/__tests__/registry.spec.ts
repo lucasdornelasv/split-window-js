@@ -88,14 +88,33 @@ describe('SplitContainerRegistry', () => {
   });
 
   describe('default container', () => {
-    it('setDefaultContainer requires an existing key; null clears it', () => {
+    it('setDefaultContainer requires an existing key; null goes back to the automatic one', () => {
       const r = new SplitContainerRegistry<Host>();
       expect(() => r.setDefaultContainer('a')).toThrow(SplitContainerNotFoundError);
       r.registerContainer('a', host());
-      r.setDefaultContainer('a');
-      expect(r.resolveKey()).toBe('a');
+      r.registerContainer('b', host());
+      r.setDefaultContainer('b');
+      expect(r.resolveKey()).toBe('b');
+      expect(r.hasExplicitDefaultContainer()).toBe(true);
       r.setDefaultContainer(null);
+      expect(r.getDefaultContainer()).toBe('a');
+      expect(r.hasExplicitDefaultContainer()).toBe(false);
+    });
+
+    it('without an explicit default, the first configured container is the default', () => {
+      const r = new SplitContainerRegistry<Host>();
       expect(r.getDefaultContainer()).toBeNull();
+      r.registerContainer('a', host());
+      r.useBodyContainers({ right: true });
+      expect(r.getDefaultContainer()).toBe('a');
+      expect(r.resolveKey()).toBe('a');
+      r.unregisterContainer('a');
+      expect(r.getDefaultContainer()).toBe('body-right');
+      r.useBodyContainers({ left: true, right: true });
+      expect(r.getDefaultContainer()).toBe('body-right'); // keeps its registration position
+      r.registerContainer('c', host());
+      r.setDefaultContainer('c');
+      expect(r.resolveKey()).toBe('c');
     });
 
     it('a disabled body side cannot be the default', () => {
@@ -109,10 +128,14 @@ describe('SplitContainerRegistry', () => {
       }
     });
 
-    it('unregistering the default leaves the app without a default', () => {
+    it('unregistering the default falls back to the first remaining container', () => {
       const r = new SplitContainerRegistry<Host>();
       r.registerContainer('a', host());
-      r.setDefaultContainer('a');
+      r.registerContainer('b', host());
+      r.setDefaultContainer('b');
+      r.unregisterContainer('b');
+      expect(r.getDefaultContainer()).toBe('a');
+      expect(r.hasExplicitDefaultContainer()).toBe(false);
       r.unregisterContainer('a');
       expect(r.getDefaultContainer()).toBeNull();
     });
@@ -149,16 +172,15 @@ describe('SplitContainerRegistry', () => {
       );
     });
 
-    it('no default', () => {
+    it('no default: only while no container is configured', () => {
       const r = new SplitContainerRegistry<Host>();
-      r.registerContainer('a', host());
       try {
         r.resolveKey();
         expect.unreachable();
       } catch (e) {
         expect(e).toBeInstanceOf(SplitNoDefaultContainerError);
-        expect((e as SplitNoDefaultContainerError).availableKeys).toEqual(['a']);
-        expect((e as Error).message).toContain('setDefaultContainer()');
+        expect((e as SplitNoDefaultContainerError).availableKeys).toEqual([]);
+        expect((e as Error).message).toContain('useBodyContainers()');
       }
     });
   });
@@ -237,11 +259,12 @@ describe('SplitContainerRegistry', () => {
       expect(controller.getTabs('body-right')).toHaveLength(1);
     });
 
-    it('disabling the default side leaves the app without a default', () => {
+    it('disabling the default side falls back to the first enabled one', () => {
       const r = new SplitContainerRegistry<Host>();
       r.useBodyContainers();
       r.useBodyContainers({ left: true });
-      expect(r.getDefaultContainer()).toBeNull();
+      expect(r.getDefaultContainer()).toBe('body-left');
+      expect(r.hasExplicitDefaultContainer()).toBe(false);
     });
   });
 

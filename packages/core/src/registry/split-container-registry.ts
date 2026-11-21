@@ -143,15 +143,27 @@ export class SplitContainerRegistry<THost = unknown> {
     if (cfg.default) this.defaultKey = bodyContainerKey(cfg.default);
   }
 
-  /** Sets the default container. `null` removes the default. */
+  /**
+   * Sets the default container. `null` removes the explicit choice and goes back to the
+   * automatic default (the first configured container).
+   */
   setDefaultContainer(key: string | null): void {
     if (key !== null) this.assertExists(key);
     this.defaultKey = key;
   }
 
-  /** The default container, or `null` until one is configured. */
+  /**
+   * The default container: the one set with `setDefaultContainer()` (or `default` of
+   * `useBodyContainers`), otherwise the first configured container, in registration order.
+   * `null` only while no container is configured.
+   */
   getDefaultContainer(): string | null {
-    return this.defaultKey;
+    return this.defaultKey ?? this.containers.keys().next().value ?? null;
+  }
+
+  /** Whether the default was chosen explicitly (`false` when it is the automatic one). */
+  hasExplicitDefaultContainer(): boolean {
+    return this.defaultKey !== null;
   }
 
   hasContainer(key: string): boolean {
@@ -163,11 +175,15 @@ export class SplitContainerRegistry<THost = unknown> {
     return this.keys();
   }
 
-  /** Resolves the container of an `open()`: `containerKey ?? default`, with explicit errors. */
+  /**
+   * Resolves the container of an `open()`: `containerKey ?? default`, with explicit errors.
+   * Without a key and without any configured container, throws `SplitNoDefaultContainerError`.
+   */
   resolveKey(containerKey?: string): string {
     if (containerKey !== undefined) return this.assertExists(containerKey).key;
-    if (this.defaultKey === null) throw new SplitNoDefaultContainerError(this.keys());
-    return this.defaultKey;
+    const key = this.getDefaultContainer();
+    if (key === null) throw new SplitNoDefaultContainerError(this.keys());
+    return key;
   }
 
   /** Returns the record of a key, or throws `SplitContainerNotFoundError`. */

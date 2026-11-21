@@ -35,7 +35,7 @@ class CompactPushMode extends SplitPushMode {
 { mode: (ctx) => (ctx.kind === 'body' ? 'push' : 'overlay') }
 ```
 
-Precedência: `containerDefaults` (e `containerDefaults.custom`/`.body`) < modo < opções do container. Classes (`hostClass`, `panelClass`, `backdropClass`) se somam; os demais valores são substituídos.
+Precedência: `containerDefaults` (e `containerDefaults.custom`/`.body`) < modo < opções do container. O `containerDefaults` também aceita opções de comportamento (`maxTabs`, `onFull`, `onReject`, `closeWhenEmpty`, `closedDropZone`, `expand` e, no body, `backdrop`), que pré-configuram cada container ao ser registrado. Classes (`hostClass`, `panelClass`, `backdropClass`) se somam; os demais valores são substituídos.
 
 ## Animação
 
