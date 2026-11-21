@@ -28,6 +28,7 @@ export {
   SPLIT_WINDOW_CONFIG,
   SPLIT_WINDOW_MODES,
   SPLIT_CONTAINER_DEFAULTS,
+  SPLIT_BODY_CONTAINERS,
   SPLIT_ANIMATION_ENGINES,
   type SplitAnimationEngineEntry,
 } from './lib/tokens';

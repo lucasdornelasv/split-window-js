@@ -5,7 +5,7 @@ import {
   validateContainerOptions,
 } from '@split-window/core';
 import { SplitModeResolver } from '../modes/mode-resolver';
-import { SPLIT_CONTAINER_DEFAULTS } from '../tokens';
+import { SPLIT_BODY_CONTAINERS, SPLIT_CONTAINER_DEFAULTS } from '../tokens';
 import type {
   SplitBodyContainerOptions,
   SplitBodyContainersConfig,
@@ -66,6 +66,11 @@ export class SplitContainerRegistry
     };
     validateContainerOptions(this.customDefaults, 'containerDefaults.');
     validateContainerOptions(this.bodyDefaults, 'containerDefaults.body.', 'body');
+    // provideSplitWindows({ bodyContainers }): the controller prepares containers that
+    // already exist when it is created, so enabling them here is enough.
+    const body = inject(SPLIT_BODY_CONTAINERS);
+    if (body === true) this.useBodyContainers();
+    else if (body) this.useBodyContainers(body);
   }
 
   /**

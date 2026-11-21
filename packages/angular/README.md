@@ -18,21 +18,18 @@ Importe tudo de `@split-window/angular`: o pacote reexporta os tipos e erros do 
 
 ```ts
 // app.config.ts
-import { inject, provideAppInitializer, type ApplicationConfig } from '@angular/core';
-import { SplitContainerRegistry, provideSplitWindows } from '@split-window/angular';
+import { type ApplicationConfig } from '@angular/core';
+import { provideSplitWindows } from '@split-window/angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideSplitWindows(),
-    provideAppInitializer(() => {
-      // só body-right, sem limite de abas, como container padrão
-      inject(SplitContainerRegistry).useBodyContainers();
-    }),
+    // só body-right, sem limite de abas, como container padrão
+    provideSplitWindows({ bodyContainers: true }),
   ],
 };
 ```
 
-O registry pode ser injetado sozinho na inicialização, sem criar o manager. Ele só guarda configuração: abrir, fechar e tela cheia são do controller (`SplitWindowController`), exposto pelo manager.
+Para configurar em tempo de execução, injete o `SplitContainerRegistry` (por exemplo num `provideAppInitializer`) e chame `useBodyContainers(...)` ou `registerContainer(...)`. O registry pode ser injetado sozinho na inicialização, sem criar o manager. Ele só guarda configuração: abrir, fechar e tela cheia são do controller (`SplitWindowController`), exposto pelo manager.
 
 Tudo é provider e pode ser trocado por uma subclasse: `provideSplitWindows({ engine: MinhaEngine, controller: MeuController })`. Modos (`inline`, `push`, `overlay`, registrados, por classe ou função), motores de animação (`@split-window/css-animation`, `@split-window/keyframes-animation`) e o fechamento sincronizado da última aba estão em [Modos e animação](../../docs/guides/modos-e-animacao.md).
 

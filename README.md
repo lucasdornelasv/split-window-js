@@ -26,16 +26,13 @@ npm install @split-window/angular @split-window/core @angular/cdk
 
 ```ts
 // app.config.ts
-import { inject, provideAppInitializer, type ApplicationConfig } from '@angular/core';
-import { SplitContainerRegistry, provideSplitWindows } from '@split-window/angular';
+import { type ApplicationConfig } from '@angular/core';
+import { provideSplitWindows } from '@split-window/angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideSplitWindows(),
-    provideAppInitializer(() => {
-      // só body-right, sem limite de abas, como container padrão
-      inject(SplitContainerRegistry).useBodyContainers();
-    }),
+    // só body-right, sem limite de abas, como container padrão
+    provideSplitWindows({ bodyContainers: true }),
   ],
 };
 ```

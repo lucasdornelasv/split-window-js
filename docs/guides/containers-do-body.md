@@ -4,10 +4,19 @@ Os containers do body são até quatro painéis fixos nas bordas da janela, com 
 
 Nenhum lado vem habilitado. `useBodyContainers()` sem argumentos equivale a `{ right: true, default: 'right' }`. Com um objeto, habilita só os lados informados: `true` usa apenas os `defaults`, e um objeto sobrescreve qualquer opção para aquele lado. As opções aceitas são as de container (exceto `closedDropZoneAnchor`) mais `size` (largura em left/right, altura em top/bottom; padrão `'420px'`) e `backdrop`. `mode: 'push'` faz o painel empurrar a página em vez de abrir por cima (`overlay`, o padrão); veja [Modos e animação](modos-e-animacao.md).
 
+Também dá para ligar direto no provide, sem `provideAppInitializer`: `provideSplitWindows({ bodyContainers: true })` equivale a `useBodyContainers()`, e um objeto é repassado como está. Os padrões de `containerDefaults.body` (modo, animação, `maxTabs`...) valem para os lados ligados das duas formas.
+
 ## Exemplo
 
 ```ts
-registry.useBodyContainers(); // only body-right, as the default
+provideSplitWindows({
+  bodyContainers: true, // only body-right, as the default
+  containerDefaults: { body: { mode: 'push', animation: true } },
+});
+```
+
+```ts
+registry.useBodyContainers(); // the same, at run time
 ```
 
 ```ts

@@ -14,6 +14,7 @@ import { SplitModeResolver } from './modes/mode-resolver';
 import { SplitContainerRegistry } from './registry/split-container-registry';
 import {
   SPLIT_ANIMATION_ENGINES,
+  SPLIT_BODY_CONTAINERS,
   SPLIT_CONTAINER_DEFAULTS,
   SPLIT_WINDOW_CONFIG,
   SPLIT_WINDOW_MODES,
@@ -31,6 +32,7 @@ import type { SplitWindowAngularConfig } from './types';
  * providers: [
  *   provideSplitWindows({
  *     labels: { defaultTitle: 'New tab' }, // or () => inject(MyTranslations).splitLabels
+ *     bodyContainers: true, // body-right enabled, as the default
  *     animationEngines: { css: new SplitCssAnimationEngine() },
  *     modes: { drawer: { extends: 'overlay', panelClass: 'drawer', animation: 'slide' } },
  *     containerDefaults: { animation: true },
@@ -39,8 +41,16 @@ import type { SplitWindowAngularConfig } from './types';
  * ```
  */
 export function provideSplitWindows(config?: SplitWindowAngularConfig): EnvironmentProviders {
-  const { modes, containerDefaults, animationEngines, engine, controller, labels, ...core } =
-    config ?? {};
+  const {
+    modes,
+    containerDefaults,
+    animationEngines,
+    engine,
+    controller,
+    labels,
+    bodyContainers,
+    ...core
+  } = config ?? {};
   const providers: Provider[] = [
     SplitContainerRegistry,
     SplitModeResolver,
@@ -56,6 +66,7 @@ export function provideSplitWindows(config?: SplitWindowAngularConfig): Environm
         }
       : { provide: SPLIT_WINDOW_CONFIG, useValue: mergeSplitWindowConfig({ ...core, labels }) },
     { provide: SPLIT_CONTAINER_DEFAULTS, useValue: containerDefaults ?? {} },
+    { provide: SPLIT_BODY_CONTAINERS, useValue: bodyContainers ?? false },
   ];
   if (modes) providers.push({ provide: SPLIT_WINDOW_MODES, useValue: modes, multi: true });
   if (animationEngines) {

@@ -5,7 +5,7 @@ import {
   type SplitWindowConfig,
 } from '@split-window/core';
 import type { SplitModeInput } from './modes/container-mode';
-import type { SplitContainerDefaultsConfig } from './types';
+import type { SplitBodyContainersConfig, SplitContainerDefaultsConfig } from './types';
 
 /** Default values of SplitWindow, set through `provideSplitWindows(config)`. */
 export const SPLIT_WINDOW_CONFIG = new InjectionToken<SplitWindowConfig>('SPLIT_WINDOW_CONFIG', {
@@ -18,6 +18,16 @@ export const SPLIT_WINDOW_CONFIG = new InjectionToken<SplitWindowConfig>('SPLIT_
  */
 export const SPLIT_WINDOW_MODES = new InjectionToken<readonly Record<string, SplitModeInput>[]>(
   'SPLIT_WINDOW_MODES',
+);
+
+/**
+ * Body containers enabled when the registry is created, from
+ * `provideSplitWindows({ bodyContainers })`: `true` is `useBodyContainers()` without
+ * arguments (only `body-right`, as the default); an object is passed as is.
+ */
+export const SPLIT_BODY_CONTAINERS = new InjectionToken<boolean | SplitBodyContainersConfig>(
+  'SPLIT_BODY_CONTAINERS',
+  { factory: () => false },
 );
 
 /** Display defaults of the containers, from `provideSplitWindows({ containerDefaults })`. */

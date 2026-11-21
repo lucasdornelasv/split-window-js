@@ -132,6 +132,13 @@ export type SplitLabelsInput = Partial<SplitWindowLabels> | (() => Partial<Split
 export interface SplitWindowAngularConfig extends Omit<SplitWindowConfigInput, 'labels'> {
   /** Texts of the library, or a factory run in an injection context. */
   labels?: SplitLabelsInput;
+  /**
+   * Body containers enabled when the registry is created, without a `provideAppInitializer`:
+   * `true` is `useBodyContainers()` (only `body-right`, as the default); an object enables
+   * the sides given (`{ left: true, right: { size: '30vw' }, default: 'right' }`). A later
+   * `useBodyContainers()` call replaces it.
+   */
+  bodyContainers?: boolean | SplitBodyContainersConfig;
   /** Named modes, used as `mode: '<name>'`. */
   modes?: Record<string, SplitModeInput>;
   /**

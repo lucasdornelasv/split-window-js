@@ -227,6 +227,42 @@ describe('@split-window/angular', () => {
       expect(() => TestBed.inject(SPLIT_WINDOW_CONFIG)).toThrow(/labels/);
     });
 
+    it('bodyContainers enables body containers without an app initializer', async () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideSplitWindows({
+            bodyContainers: true,
+            containerDefaults: { body: { animation: true, mode: 'push', maxTabs: 2 } },
+          }),
+        ],
+      });
+      const manager = TestBed.inject(SplitWindowManager);
+      const ref = manager.open(TabComponent);
+      expect(ref.containerKey).toBe('body-right');
+      expect(manager.isContainerOpen('body-right')).toBe(true);
+      const reg = TestBed.inject(SplitContainerRegistry);
+      expect(reg.getDefaultContainer()).toBe('body-right');
+      expect(reg._get('body-right')!.options.maxTabs).toBe(2);
+      await ref.close();
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideSplitWindows({ bodyContainers: { left: true, right: true, default: 'right' } }),
+        ],
+      });
+      const reg2 = TestBed.inject(SplitContainerRegistry);
+      expect(reg2.getContainerKeys()).toEqual(['body-left', 'body-right']);
+      expect(reg2.getDefaultContainer()).toBe('body-right');
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [provideSplitWindows({ bodyContainers: false })],
+      });
+      expect(TestBed.inject(SplitContainerRegistry).getContainerKeys()).toEqual([]);
+    });
+
     it('containerDefaults is validated', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({

@@ -2,6 +2,10 @@
 
 Os pacotes `@split-window/core`, `@split-window/css-animation`, `@split-window/keyframes-animation` e `@split-window/angular` saem juntos, com a mesma versão (semver em lockstep).
 
+## 0.5.0 — 2026-11-21
+
+- `provideSplitWindows({ bodyContainers })`: liga os containers do body na criação do registry, sem `provideAppInitializer`. `true` equivale a `useBodyContainers()` (só `body-right`, como padrão) e um objeto é repassado como está. Novo token `SPLIT_BODY_CONTAINERS`.
+
 ## 0.4.0 — 2026-11-21
 
 - Container padrão automático: sem um padrão explícito (`setDefaultContainer`, `splitContainerDefault` ou `default` de `useBodyContainers`), o `open()` sem `containerKey` usa o primeiro container configurado. Desregistrar o padrão ou `setDefaultContainer(null)` voltam a esse padrão automático, e `SplitNoDefaultContainerError` só acontece sem nenhum container. `getDefaultContainer()` devolve o padrão em vigor; novo `hasExplicitDefaultContainer()`.
