@@ -1,7 +1,10 @@
 name: CI
 
+# Runs on version tags (alongside release.yml) and on pull requests. Plain pushes to a
+# branch do not run it, so pushing a commit and its tag together runs it only once.
 on:
   push:
+    tags: ['v*.*.*']
   pull_request:
 
 jobs:
