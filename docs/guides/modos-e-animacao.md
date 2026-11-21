@@ -48,7 +48,10 @@ import { SplitCssAnimationEngine } from '@split-window/css-animation';
 import { SplitKeyframesAnimationEngine } from '@split-window/keyframes-animation';
 
 provideSplitWindows({
-  animationEngines: { css: SplitCssAnimationEngine, keyframes: SplitKeyframesAnimationEngine },
+  animationEngines: {
+    css: new SplitCssAnimationEngine(),
+    keyframes: () => new SplitKeyframesAnimationEngine(),
+  },
   containerDefaults: { animation: true }, // global: anima todos com o primeiro motor (css)
 });
 
@@ -56,11 +59,25 @@ provideSplitWindows({
 { animation: { engine: 'keyframes', preset: 'fade', duration: 250 } } // por nome
 { animation: { engine: 'none' } }                  // noop
 { animation: new SplitKeyframesAnimationEngine({ show: [...], hide: [...] }) } // instância
-{ animation: MinhaEngine }                         // classe (criada com DI)
+{ animation: MinhaEngine }                         // classe (criada num contexto de injeção)
 { animation: (ctx) => ctx.elements.shell.animate(...).finished } // função
 ```
 
-- O registro é o serviço `SplitAnimationEngineRegistry` (criado pela injeção de dependências). Para registrar depois, em qualquer momento: `inject(SplitAnimationEngineRegistry).register('pop', PopEngine)`. O motor é resolvido a cada transição, então o registro vale a partir da próxima abertura ou fechamento, inclusive para containers já montados. Para trocar o registro por uma subclasse: `provideSplitWindows({ animationEngineRegistry: MeuRegistro })`.
+- Cada entrada de `animationEngines` (e de `provideSplitAnimationEngines`) é o próprio motor ou uma factory que o devolve. A factory roda uma vez, num contexto de injeção, quando o registro é criado, então pode usar `inject()`: `pop: () => new PopEngine(inject(POP_CONFIG))`.
+- O registro é o `SplitAnimationEngineRegistry` do core, fornecido pela injeção de dependências com a factory `splitAnimationEngineRegistryFactory`. Para registrar depois, em qualquer momento: `inject(SplitAnimationEngineRegistry).register('pop', new PopEngine())`. O motor é resolvido a cada transição, então o registro vale a partir da próxima abertura ou fechamento, inclusive para containers já montados. Para personalizar o registro, forneça o seu provider partindo da factory padrão:
+
+  ```ts
+  {
+    provide: SplitAnimationEngineRegistry,
+    useFactory: () => {
+      const registry = splitAnimationEngineRegistryFactory();
+      registry.register('pop', new PopEngine());
+      return registry;
+    },
+  }
+  ```
+
+- Uma classe usada direto em `animation.engine` (ou em `animation`) é criada num contexto de injeção, então também pode usar `inject()`.
 - Sem motor escolhido, vale o **primeiro registrado**. O `NoopSplitAnimationEngine` só é usado quando nenhum motor foi registrado ou quando `'none'` é escolhido. Mesmo sem mover nada, ele passa por `started()` e `progress(1)` de forma síncrona, e os eventos de `containerTransitions` saem do mesmo jeito.
 - `preset`: `slide` (padrão de overlay e do push no body), `collapse` (padrão do push custom: só o tamanho do host), `fade` (padrão do inline) ou `none`.
 - `duration`, `easing` e `delay` valem para todos os motores. O motor CSS também lê `--split-animation-duration`, `--split-animation-easing` e `--split-animation-delay`.

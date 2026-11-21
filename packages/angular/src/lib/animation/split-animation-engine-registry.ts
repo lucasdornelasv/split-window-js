@@ -1,35 +1,47 @@
-import { EnvironmentInjector, Injectable, Injector, inject } from '@angular/core';
-import { SplitAnimationEngineRegistry as CoreSplitAnimationEngineRegistry } from '@split-window/core';
-import { SPLIT_ANIMATION_ENGINES } from '../tokens';
+import { EnvironmentInjector, inject, runInInjectionContext } from '@angular/core';
+import {
+  SplitAnimationEngineRegistry,
+  isAnimationEngineClass,
+  type SplitAnimationEngine,
+} from '@split-window/core';
+import { SPLIT_ANIMATION_ENGINES, type SplitAnimationEngineEntry } from '../tokens';
 
 /**
- * Named animation engines, as an Angular service. Starts with the engines of
- * `provideSplitWindows({ animationEngines })` and `provideSplitAnimationEngines()`, in
- * order, and creates engine classes with dependency injection. Inject it to register more
- * engines at any time:
+ * Factory of the `SplitAnimationEngineRegistry` (from the core) that `provideSplitWindows()`
+ * registers. Must run in an injection context. Registers the engines of
+ * `provideSplitWindows({ animationEngines })` and `provideSplitAnimationEngines()`, in order;
+ * factory entries run here, in the injection context. Engine classes given as
+ * `animation.engine` are created in the same context, so they may use `inject()`.
+ *
+ * Use it to provide your own registry on top of the default one:
  *
  * ```ts
- * inject(SplitAnimationEngineRegistry).register('pop', PopAnimationEngine);
+ * {
+ *   provide: SplitAnimationEngineRegistry,
+ *   useFactory: () => {
+ *     const registry = splitAnimationEngineRegistryFactory();
+ *     registry.register('pop', new PopAnimationEngine());
+ *     return registry;
+ *   },
+ * }
  * ```
- *
- * Engines are resolved on each transition, so a registration counts from the next
- * open/close on: a container without a chosen engine uses the first registered one, and a
- * container that names an engine uses it once it is registered.
- *
- * Registered only by `provideSplitWindows()`. Replace it with a subclass through
- * `provideSplitWindows({ animationEngineRegistry })`.
  */
-@Injectable()
-export class SplitAnimationEngineRegistry extends CoreSplitAnimationEngineRegistry<HTMLElement> {
-  constructor() {
-    const injector = inject(EnvironmentInjector);
-    super((type) =>
-      Injector.create({ providers: [{ provide: type, useClass: type }], parent: injector }).get(
-        type,
-      ),
-    );
-    for (const record of inject(SPLIT_ANIMATION_ENGINES, { optional: true }) ?? []) {
-      for (const [name, engine] of Object.entries(record)) this.register(name, engine);
+export function splitAnimationEngineRegistryFactory(): SplitAnimationEngineRegistry<HTMLElement> {
+  const injector = inject(EnvironmentInjector);
+  const registry = new SplitAnimationEngineRegistry<HTMLElement>((type) =>
+    runInInjectionContext(injector, () => new type()),
+  );
+  for (const record of inject(SPLIT_ANIMATION_ENGINES, { optional: true }) ?? []) {
+    for (const [name, entry] of Object.entries(record)) {
+      registry.register(name, engineOf(entry));
     }
   }
+  return registry;
+}
+
+/** Runs a factory entry (we are in the injection context of the registry factory). */
+function engineOf(entry: SplitAnimationEngineEntry): SplitAnimationEngine<HTMLElement> {
+  if (typeof entry === 'function' && !isAnimationEngineClass(entry)) return entry();
+  // An engine, or a class (outside the types): the registry creates it in the injection context.
+  return entry as SplitAnimationEngine<HTMLElement>;
 }

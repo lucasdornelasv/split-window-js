@@ -5,7 +5,7 @@ Motor de animação do SplitWindow com a Web Animations API (`element.animate`).
 ```ts
 import { SplitKeyframesAnimationEngine } from '@split-window/keyframes-animation';
 
-provideSplitWindows({ animationEngines: { keyframes: SplitKeyframesAnimationEngine } });
+provideSplitWindows({ animationEngines: { keyframes: new SplitKeyframesAnimationEngine() } });
 
 // keyframes próprios numa instância
 { animation: { duration: 250, engine: new SplitKeyframesAnimationEngine({

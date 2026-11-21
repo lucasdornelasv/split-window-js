@@ -16,7 +16,10 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes, withHashLocation()),
     provideSplitWindows({
       // Animation engines by name; an animated container without `engine` uses the first.
-      animationEngines: { css: SplitCssAnimationEngine, keyframes: SplitKeyframesAnimationEngine },
+      animationEngines: {
+        css: new SplitCssAnimationEngine(),
+        keyframes: new SplitKeyframesAnimationEngine(),
+      },
       // A global mode, used by the "Modos e animação" page as mode: 'drawer'.
       modes: {
         drawer: {

@@ -10,7 +10,7 @@ import type {
 
 /*
  * The animation contract lives in @split-window/core. These are its types bound to
- * `HTMLElement`, plus Angular classes (`Type`) as engines, created with DI.
+ * `HTMLElement`, plus engine classes (`Type`), created in an injection context.
  * Engines: `@split-window/css-animation`, `@split-window/keyframes-animation`, or your own.
  */
 
@@ -25,7 +25,7 @@ export type SplitAnimationFn = CoreAnimationFn<HTMLElement>;
 
 /**
  * What `animation.engine` accepts: the name of a registered engine, `'none'` (noop), an
- * instance, a class (created with DI) or a function. Without a value: the first registered
+ * instance, a class (created in an injection context) or a function. Without a value: the first registered
  * engine, or noop when none is registered.
  */
 export type SplitAnimationEngineInput =

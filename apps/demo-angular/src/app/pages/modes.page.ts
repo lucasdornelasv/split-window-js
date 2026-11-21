@@ -60,7 +60,10 @@ registry.useBodyContainers({ right: { mode: 'push', size: '360px', animation: tr
 
 const ENGINES_CODE = `// engines registered globally, by name; the first one is the default
 provideSplitWindows({
-  animationEngines: { css: SplitCssAnimationEngine, keyframes: SplitKeyframesAnimationEngine },
+  animationEngines: {
+    css: new SplitCssAnimationEngine(),
+    keyframes: () => new SplitKeyframesAnimationEngine(),
+  },
 });
 { animation: true }                       // css (the first registered)
 { animation: { engine: 'keyframes' } }    // by name

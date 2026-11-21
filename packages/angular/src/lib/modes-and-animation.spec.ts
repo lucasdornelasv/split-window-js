@@ -20,6 +20,7 @@ import {
   SplitWindowManager,
   provideSplitAnimationEngines,
   SplitAnimationEngineRegistry,
+  splitAnimationEngineRegistryFactory,
   provideSplitModes,
   SplitWindowController,
   type ContainerState,
@@ -89,11 +90,20 @@ class CountingController extends SplitWindowController {
   }
 }
 
-@Injectable()
-class PresetEngines extends SplitAnimationEngineRegistry {
-  constructor() {
+const ENGINE_NAME = new InjectionToken<string>('ENGINE_NAME');
+
+class NamedBy extends SplitAnimationEngine<HTMLElement> {
+  constructor(private readonly name: string) {
     super();
-    this.register('first', First);
+  }
+  animate(ctx: SplitAnimationContext): void {
+    Named.used.push(`${this.name}:${ctx.container.key}`);
+  }
+}
+
+class InjectingEngine extends NamedBy {
+  constructor() {
+    super(inject(ENGINE_NAME));
   }
 }
 
@@ -405,7 +415,7 @@ describe('modes and animations', () => {
     });
 
     it('the CSS engine toggles the state classes and waits for transitionend', async () => {
-      setup({ animationEngines: { css: SplitCssAnimationEngine } });
+      setup({ animationEngines: { css: () => new SplitCssAnimationEngine() } });
       const host = hostEl();
       registry.registerContainer('a', host, {
         mode: {
@@ -434,7 +444,7 @@ describe('modes and animations', () => {
     });
 
     it('the CSS engine ends at once without a transition duration', () => {
-      setup({ animationEngines: { css: SplitCssAnimationEngine } });
+      setup({ animationEngines: { css: () => new SplitCssAnimationEngine() } });
       registry.registerContainer('a', hostEl(), {
         // The library styles give 200ms; a zero duration must end synchronously.
         mode: { onOpen: (ctx) => ctx.styles.set(ctx.elements.shell, 'transition-duration', '0s') },
@@ -457,7 +467,7 @@ describe('modes and animations', () => {
     });
 
     it('the keyframes engine animates the shell and the host size', async () => {
-      setup({ animationEngines: { keyframes: SplitKeyframesAnimationEngine } });
+      setup({ animationEngines: { keyframes: new SplitKeyframesAnimationEngine() } });
       const animations: { el: Element; keyframes: Keyframe[]; cancel: ReturnType<typeof vi.fn> }[] =
         [];
       let resolveAll!: () => void;
@@ -567,7 +577,7 @@ describe('modes and animations', () => {
     beforeEach(() => (Named.used = []));
 
     it('uses the first registered engine, a chosen one, or noop with none', () => {
-      setup({ animationEngines: { first: First, second: Second } });
+      setup({ animationEngines: { first: new First(), second: () => new Second() } });
       registry.registerContainer('a', hostEl(), { animation: true });
       registry.registerContainer('b', hostEl(), { animation: { engine: 'second' } });
       registry.registerContainer('c', hostEl(), { animation: { engine: 'none' } });
@@ -596,8 +606,8 @@ describe('modes and animations', () => {
         await a1.close();
         await b1.close();
 
-        engines.register('later', Second);
-        engines.register('first', First);
+        engines.register('later', new Second());
+        engines.register('first', new First());
         manager.open(Tab, { containerKey: 'a' });
         manager.open(Tab, { containerKey: 'b' });
         // 'a' uses the named engine; 'b' the first registered ('later' -> Second).
@@ -607,21 +617,60 @@ describe('modes and animations', () => {
       }
     });
 
-    it('provideSplitWindows can replace the registry with a subclass', () => {
-      setup({ animationEngineRegistry: PresetEngines });
-      expect(TestBed.inject(SplitAnimationEngineRegistry)).toBeInstanceOf(PresetEngines);
+    it('the registry is the core one, from a factory provider that can be replaced', () => {
+      setup({ animationEngines: { second: new Second() } }, [
+        {
+          provide: SplitAnimationEngineRegistry,
+          useFactory: () => {
+            const engines = splitAnimationEngineRegistryFactory();
+            engines.register('first', new First());
+            return engines;
+          },
+        },
+      ]);
+      const engines = TestBed.inject(SplitAnimationEngineRegistry);
+      expect(engines).toBeInstanceOf(SplitAnimationEngineRegistry);
+      expect(engines.names()).toEqual(['second', 'first']);
       registry.registerContainer('a', hostEl(), { animation: true });
       manager.open(Tab, { containerKey: 'a' });
-      expect(Named.used).toEqual(['First:a']);
+      expect(Named.used).toEqual(['Second:a']);
+    });
+
+    it('factory entries run once, in an injection context', () => {
+      let runs = 0;
+      setup(
+        {
+          animationEngines: {
+            named: () => {
+              runs++;
+              return new NamedBy(inject(ENGINE_NAME));
+            },
+          },
+        },
+        [{ provide: ENGINE_NAME, useValue: 'from-di' }],
+      );
+      registry.registerContainer('a', hostEl(), { animation: true });
+      registry.registerContainer('b', hostEl(), { animation: { engine: 'named' } });
+      manager.open(Tab, { containerKey: 'a' });
+      manager.open(Tab, { containerKey: 'b' });
+      expect(runs).toBe(1);
+      expect(Named.used).toEqual(['from-di:a', 'from-di:b']);
+    });
+
+    it('an engine class given as animation.engine is created in an injection context', () => {
+      setup(undefined, [{ provide: ENGINE_NAME, useValue: 'class-di' }]);
+      registry.registerContainer('a', hostEl(), { animation: { engine: InjectingEngine } });
+      manager.open(Tab, { containerKey: 'a' });
+      expect(Named.used).toEqual(['class-di:a']);
     });
 
     it('a global engine in containerDefaults, and provideSplitAnimationEngines adds after', () => {
       setup(
         {
-          animationEngines: { first: First },
+          animationEngines: { first: new First() },
           containerDefaults: { animation: { engine: 'second' } },
         },
-        [provideSplitAnimationEngines({ second: Second })],
+        [provideSplitAnimationEngines({ second: () => new Second() })],
       );
       registry.registerContainer('a', hostEl());
       manager.open(Tab, { containerKey: 'a' });

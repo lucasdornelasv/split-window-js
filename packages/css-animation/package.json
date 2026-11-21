@@ -1,6 +1,6 @@
 {
   "name": "@split-window/css-animation",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CSS animation engine of SplitWindow: state classes and transitionend, in the style of ngbRunTransition.",
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@split-window/core": "0.2.0"
+    "@split-window/core": "0.3.0"
   },
   "publishConfig": {
     "access": "public"

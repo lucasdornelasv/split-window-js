@@ -9,7 +9,7 @@ export {
 } from './lib/provide-split-windows';
 export { SplitWindowManager } from './lib/manager/split-window-manager';
 export { SplitWindowController } from './lib/controller/split-window-controller';
-export { SplitAnimationEngineRegistry } from './lib/animation/split-animation-engine-registry';
+export { splitAnimationEngineRegistryFactory } from './lib/animation/split-animation-engine-registry';
 export { SplitContainerRegistry } from './lib/registry/split-container-registry';
 export { SplitActiveWindow } from './lib/active-window/split-active-window';
 export { SplitContainerDirective } from './lib/directive/split-container.directive';
@@ -80,6 +80,7 @@ export {
   SplitAnimationEngine,
   NoopSplitAnimationEngine,
   SplitFunctionAnimationEngine,
+  SplitAnimationEngineRegistry,
   SPLIT_DEFAULT_EASING,
   SPLIT_NOOP_ANIMATION_ENGINE,
 } from '@split-window/core';

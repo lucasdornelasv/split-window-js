@@ -5,7 +5,7 @@ Motor de animação CSS do SplitWindow, no estilo do `ngbRunTransition` do ng-bo
 ```ts
 import { SplitCssAnimationEngine } from '@split-window/css-animation';
 
-provideSplitWindows({ animationEngines: { css: SplitCssAnimationEngine } });
+provideSplitWindows({ animationEngines: { css: new SplitCssAnimationEngine() } });
 // ou, numa instância: new SplitCssAnimationEngine({ classes: { show: 'aberto' }, injectStyles: false })
 ```
 

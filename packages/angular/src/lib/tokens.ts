@@ -1,4 +1,4 @@
-import { InjectionToken, type Type } from '@angular/core';
+import { InjectionToken } from '@angular/core';
 import {
   mergeSplitWindowConfig,
   type SplitAnimationEngine,
@@ -26,9 +26,20 @@ export const SPLIT_CONTAINER_DEFAULTS = new InjectionToken<SplitContainerDefault
   { factory: () => ({}) },
 );
 
-/** A registered animation engine: an instance or a class (created with DI). */
+/**
+ * A registered animation engine: the engine itself, or a factory that returns it. The
+ * factory runs once, in an injection context, when the registry is created, so it may use
+ * `inject()`.
+ *
+ * ```ts
+ * animationEngines: {
+ *   css: new SplitCssAnimationEngine(),
+ *   keyframes: () => new SplitKeyframesAnimationEngine(inject(MY_KEYFRAMES)),
+ * }
+ * ```
+ */
 export type SplitAnimationEngineEntry =
-  SplitAnimationEngine<HTMLElement> | Type<SplitAnimationEngine<HTMLElement>>;
+  SplitAnimationEngine<HTMLElement> | (() => SplitAnimationEngine<HTMLElement>);
 
 /**
  * Named animation engines (multi provider), in registration order. Without a chosen

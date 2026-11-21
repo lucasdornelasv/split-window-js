@@ -27,6 +27,7 @@ import {
   computeExpandedRect,
   rectsMatch,
   resolveLength,
+  SplitAnimationEngineRegistry,
   SplitStyleStash,
   type ContainerState,
   type SplitAnimationEngine,
@@ -36,7 +37,6 @@ import {
   type TabState,
 } from '@split-window/core';
 import { SplitActiveWindow } from '../active-window/split-active-window';
-import { SplitAnimationEngineRegistry } from '../animation/split-animation-engine-registry';
 import type { SplitContainerElements } from '../animation/animation-engine';
 import { axisOf, type SplitModeContext } from '../modes/container-mode';
 import { SplitModeResolver, type SplitResolvedMode } from '../modes/mode-resolver';
@@ -172,7 +172,9 @@ export class AngularSplitEngine extends BaseSplitWindowEngine<
   protected readonly resolver = inject(SplitModeResolver);
   protected readonly config = inject(SPLIT_WINDOW_CONFIG);
   /** Named animation engines, resolved on each transition. */
-  protected readonly animationEngines = inject(SplitAnimationEngineRegistry);
+  protected readonly animationEngines = inject(
+    SplitAnimationEngineRegistry,
+  ) as SplitAnimationEngineRegistry<HTMLElement>;
   /** Renderer for every DOM write of the engine. */
   protected readonly renderer: Renderer2 = inject(RendererFactory2).createRenderer(null, null);
   /** Writer of the style stashes (modes included), backed by the renderer. */

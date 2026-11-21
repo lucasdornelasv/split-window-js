@@ -10,7 +10,6 @@ import type {
 } from '@split-window/core';
 import type { SplitActiveWindow } from './active-window/split-active-window';
 import type { SplitAnimationInput } from './animation/animation-engine';
-import type { SplitAnimationEngineRegistry } from './animation/split-animation-engine-registry';
 import type { SplitWindowController } from './controller/split-window-controller';
 import type { AngularSplitEngine } from './engine/angular-split-engine';
 import type { SplitClassInput, SplitModeInput, SplitModeSettings } from './modes/container-mode';
@@ -106,8 +105,6 @@ export interface SplitWindowAngularConfig extends SplitWindowConfigInput {
    * `engine: 'none'` is chosen.
    */
   animationEngines?: Record<string, SplitAnimationEngineEntry>;
-  /** A subclass of `SplitAnimationEngineRegistry` to use instead of it. */
-  animationEngineRegistry?: Type<SplitAnimationEngineRegistry>;
   /** A subclass of `AngularSplitEngine` to use instead of it. */
   engine?: Type<AngularSplitEngine>;
   /** A subclass of `SplitWindowController` to use instead of it. */

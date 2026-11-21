@@ -2,6 +2,15 @@
 
 Os pacotes `@split-window/core`, `@split-window/css-animation`, `@split-window/keyframes-animation` e `@split-window/angular` saem juntos, com a mesma versão (semver em lockstep).
 
+## 0.3.0 — 2026-11-21
+
+### Mudanças que quebram compatibilidade
+
+- `@split-window/angular` não tem mais a classe `SplitAnimationEngineRegistry` própria: o token é o `SplitAnimationEngineRegistry` do core (reexportado pelo pacote), fornecido por factory (`splitAnimationEngineRegistryFactory`). `inject(SplitAnimationEngineRegistry)` continua funcionando.
+- Removida a opção `provideSplitWindows({ animationEngineRegistry })`. Para personalizar o registro, forneça `{ provide: SplitAnimationEngineRegistry, useFactory }` partindo de `splitAnimationEngineRegistryFactory()`.
+- `SplitAnimationEngineEntry` (entradas de `animationEngines` e `provideSplitAnimationEngines`) passa a ser o próprio motor ou uma factory executada uma vez num contexto de injeção, no lugar de uma classe. Troque `{ css: SplitCssAnimationEngine }` por `{ css: new SplitCssAnimationEngine() }` ou `{ css: () => new SplitCssAnimationEngine() }`.
+- Classes usadas direto em `animation.engine` são criadas num contexto de injeção (`inject()` funciona sem `@Injectable`).
+
 ## 0.2.0 — 2026-11-21
 
 - `SplitWindowRef.setInputData(data)`: atualiza os inputs do conteúdo de uma aba aberta. No Angular, chama `setInput` só nos inputs que o componente declara (nome da propriedade ou alias), ignorando chaves desconhecidas e valores `undefined`. Novo membro opcional `setInputs` no contrato `SplitWindowEngine`.

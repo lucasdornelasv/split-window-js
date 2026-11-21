@@ -1,6 +1,6 @@
 import { makeEnvironmentProviders, type EnvironmentProviders, type Provider } from '@angular/core';
-import { mergeSplitWindowConfig } from '@split-window/core';
-import { SplitAnimationEngineRegistry } from './animation/split-animation-engine-registry';
+import { SplitAnimationEngineRegistry, mergeSplitWindowConfig } from '@split-window/core';
+import { splitAnimationEngineRegistryFactory } from './animation/split-animation-engine-registry';
 import { SplitWindowController } from './controller/split-window-controller';
 import { AngularSplitEngine } from './engine/angular-split-engine';
 import { SplitWindowManager } from './manager/split-window-manager';
@@ -26,7 +26,7 @@ import type { SplitWindowAngularConfig } from './types';
  * providers: [
  *   provideSplitWindows({
  *     labels: { defaultTitle: 'New tab' },
- *     animationEngines: { css: SplitCssAnimationEngine },
+ *     animationEngines: { css: new SplitCssAnimationEngine() },
  *     modes: { drawer: { extends: 'overlay', panelClass: 'drawer', animation: 'slide' } },
  *     containerDefaults: { animation: true },
  *   }),
@@ -34,21 +34,11 @@ import type { SplitWindowAngularConfig } from './types';
  * ```
  */
 export function provideSplitWindows(config?: SplitWindowAngularConfig): EnvironmentProviders {
-  const {
-    modes,
-    containerDefaults,
-    animationEngines,
-    animationEngineRegistry,
-    engine,
-    controller,
-    ...core
-  } = config ?? {};
+  const { modes, containerDefaults, animationEngines, engine, controller, ...core } = config ?? {};
   const providers: Provider[] = [
     SplitContainerRegistry,
     SplitModeResolver,
-    animationEngineRegistry
-      ? { provide: SplitAnimationEngineRegistry, useClass: animationEngineRegistry }
-      : SplitAnimationEngineRegistry,
+    { provide: SplitAnimationEngineRegistry, useFactory: splitAnimationEngineRegistryFactory },
     engine ? { provide: AngularSplitEngine, useClass: engine } : AngularSplitEngine,
     controller ? { provide: SplitWindowController, useClass: controller } : SplitWindowController,
     SplitWindowManager,
@@ -71,13 +61,13 @@ export function provideSplitModes(modes: Record<string, SplitModeInput>): Enviro
 }
 
 /**
- * Registers named animation engines (instances or classes created with DI), after the ones
- * of `provideSplitWindows()`. Must be in the same environment injector. To register at run
- * time, inject `SplitAnimationEngineRegistry` and call `register()`.
+ * Registers named animation engines (engines, or factories run in an injection context),
+ * after the ones of `provideSplitWindows()`. Must be in the same environment injector. To
+ * register at run time, inject `SplitAnimationEngineRegistry` and call `register()`.
  *
  * ```ts
  * provideSplitAnimationEngines({
- *   css: SplitCssAnimationEngine,
+ *   css: () => new SplitCssAnimationEngine({ injectStyles: inject(MY_FLAG) }),
  *   pop: new SplitKeyframesAnimationEngine({ show: [{ transform: 'scale(.9)' }, { transform: 'none' }] }),
  * })
  * ```
