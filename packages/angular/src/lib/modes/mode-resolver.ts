@@ -2,12 +2,12 @@ import { EnvironmentInjector, Injectable, Injector, inject, type Type } from '@a
 import {
   SPLIT_CONTAINER_LAYOUTS,
   SplitInvalidOptionError,
-  defaultAnimationPreset,
   normalizeAnimation,
+  resolveAnimation,
   toClassList,
   type ContainerState,
   type SplitAnimationInput as CoreAnimationInput,
-  type SplitAnimationSettings,
+  type SplitAnimationPhases,
   type SplitBodySide,
   type SplitContainerLayout,
 } from '@split-window/core';
@@ -46,7 +46,8 @@ export interface SplitResolvedMode {
    * transition, so engines registered later count.
    */
   readonly engine: SplitAnimationEngineInput | undefined;
-  readonly animation: SplitAnimationSettings;
+  /** Settings of the show and of the hide. */
+  readonly animation: SplitAnimationPhases;
 }
 
 const isLayout = (value: unknown): value is SplitContainerLayout =>
@@ -128,16 +129,9 @@ export class SplitModeResolver {
     let size: string | null = settings.size ?? null;
     if (kind === 'body' || layout === 'overlay') size ??= this.config.bodySize;
     if (layout === 'inline' && kind === 'custom') size = null;
-    const animation = normalizeAnimation(
-      settings.animation as CoreAnimationInput<HTMLElement> | undefined,
-    );
-    const settingsOut: SplitAnimationSettings = {
-      preset: animation.preset ?? defaultAnimationPreset(layout, kind),
-      duration: animation.duration,
-      easing: animation.easing,
-      delay: animation.delay,
-      respectReducedMotion: animation.respectReducedMotion ?? true,
-    };
+    const animationInput = settings.animation as CoreAnimationInput<HTMLElement> | undefined;
+    const animation = normalizeAnimation(animationInput);
+    const phases = resolveAnimation(animationInput, { layout, kind, side });
     return {
       mode,
       kind,
@@ -150,7 +144,7 @@ export class SplitModeResolver {
       backdropClass: toClassList(settings.backdropClass),
       animated: animation.enabled === true,
       engine: animation.engine as SplitAnimationEngineInput | undefined,
-      animation: settingsOut,
+      animation: phases,
     };
   }
 

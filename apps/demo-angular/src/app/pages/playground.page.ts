@@ -16,10 +16,13 @@ import { NoteTabComponent } from '../shared/tabs';
 import {
   CONTAINER_KEYS,
   CUSTOM_KEYS,
+  EASINGS,
   ENGINES,
   MODES,
   ON_FULL,
   ON_REJECT,
+  ORIGINS,
+  PHASES,
   PRESETS,
   SIDES,
   bodyConfig,
@@ -32,6 +35,8 @@ import {
   type ContainerKey,
   type CustomKey,
   type OpenConfig,
+  type Phase,
+  type PhaseConfig,
   type PlaygroundState,
 } from './playground.model';
 
@@ -240,27 +245,112 @@ const errorText = (e: unknown) => `${(e as Error).name}: ${(e as Error).message}
                 }
               </select>
             </label>
-            <label class="demo-field"
-              >animation.preset
-              <select
-                data-field="preset"
-                [ngModel]="current().preset"
-                (ngModelChange)="patchSelected({ preset: $event })"
-              >
-                @for (p of presets; track p) {
-                  <option [value]="p">{{ p || '(pelo layout)' }}</option>
+            <p class="pg-note">
+              Opções iguais nas duas fases vão para o topo de <code>animation</code> no código.
+            </p>
+            @for (phase of phases; track phase) {
+              <fieldset class="pg-phase" [attr.data-phase]="phase">
+                <legend>
+                  animation.{{ phase }} ({{ phase === 'show' ? 'abertura' : 'fechamento' }})
+                </legend>
+                <label class="demo-field"
+                  >preset
+                  <select
+                    [attr.data-field]="phase + '-preset'"
+                    [ngModel]="current()[phase].preset"
+                    (ngModelChange)="patchPhase(phase, { preset: $event })"
+                  >
+                    @for (p of presets; track p) {
+                      <option [value]="p">{{ p || '(pelo layout)' }}</option>
+                    }
+                  </select>
+                </label>
+                <label class="demo-field"
+                  >duration (ms)
+                  <input
+                    type="number"
+                    min="0"
+                    [attr.data-field]="phase + '-duration'"
+                    [ngModel]="current()[phase].duration"
+                    (ngModelChange)="patchPhase(phase, { duration: number($event) })"
+                /></label>
+                <label class="demo-field"
+                  >delay (ms)
+                  <input
+                    type="number"
+                    min="0"
+                    [attr.data-field]="phase + '-delay'"
+                    [ngModel]="current()[phase].delay"
+                    (ngModelChange)="patchPhase(phase, { delay: number($event) })"
+                /></label>
+                <label class="demo-field"
+                  >easing
+                  <select
+                    [attr.data-field]="phase + '-easing'"
+                    [ngModel]="current()[phase].easing"
+                    (ngModelChange)="patchPhase(phase, { easing: $event })"
+                  >
+                    @for (e of easings; track e) {
+                      <option [value]="e">{{ easingLabel(e, phase) }}</option>
+                    }
+                  </select>
+                </label>
+                @if (current()[phase].easing === 'cubic') {
+                  <label class="demo-field"
+                    >cubicBezier([x1, y1, x2, y2])
+                    <input
+                      [attr.data-field]="phase + '-cubic'"
+                      placeholder="0.2, 0, 0, 1"
+                      [ngModel]="current()[phase].cubic"
+                      (ngModelChange)="patchPhase(phase, { cubic: $event })"
+                  /></label>
                 }
-              </select>
-            </label>
-            <label class="demo-field"
-              >animation.duration (ms)
-              <input
-                type="number"
-                min="0"
-                data-field="duration"
-                [ngModel]="current().duration"
-                (ngModelChange)="patchSelected({ duration: $event ? +$event : null })"
-            /></label>
+                @if (movesPanel(phase)) {
+                  <label class="demo-field"
+                    >origin
+                    <select
+                      [attr.data-field]="phase + '-origin'"
+                      [ngModel]="current()[phase].origin"
+                      (ngModelChange)="patchPhase(phase, { origin: $event })"
+                    >
+                      @for (o of origins; track o) {
+                        <option [value]="o">
+                          {{
+                            o ||
+                              (current()[phase].preset === 'scale'
+                                ? '(center)'
+                                : '(o lado do container)')
+                          }}
+                        </option>
+                      }
+                    </select>
+                  </label>
+                }
+                @if (current()[phase].preset !== 'scale' && movesPanel(phase)) {
+                  <label class="demo-field"
+                    >distance (slide)
+                    <input
+                      [attr.data-field]="phase + '-distance'"
+                      placeholder="100% (px ou comprimento CSS)"
+                      [ngModel]="current()[phase].distance"
+                      (ngModelChange)="patchPhase(phase, { distance: $event })"
+                  /></label>
+                }
+                @if (current()[phase].preset === 'scale') {
+                  <label class="demo-field"
+                    >scale (menor que 1 cresce, maior que 1 encolhe)
+                    <input
+                      type="number"
+                      min="0.05"
+                      step="0.05"
+                      placeholder="0.9"
+                      [attr.data-field]="phase + '-scale'"
+                      [ngModel]="current()[phase].scale"
+                      (ngModelChange)="patchPhase(phase, { scale: number($event) })"
+                  /></label>
+                }
+              </fieldset>
+            }
           }
           <label class="demo-field"
             >panelClass
@@ -496,6 +586,9 @@ const errorText = (e: unknown) => `${(e as Error).name}: ${(e as Error).message}
     .pg-selected {
       background: var(--demo-surface);
     }
+    .pg-phase {
+      gap: 6px;
+    }
     .pg-kind,
     .pg-note {
       color: var(--demo-muted);
@@ -565,6 +658,9 @@ export default class PlaygroundPage implements AfterViewInit, OnDestroy {
   readonly sides = SIDES;
   readonly engines = ENGINES;
   readonly presets = PRESETS;
+  readonly phases = PHASES;
+  readonly origins = ORIGINS;
+  readonly easings = EASINGS;
   readonly onFull = ON_FULL;
   readonly onReject = ON_REJECT;
   readonly isBody = isBody;
@@ -602,6 +698,28 @@ export default class PlaygroundPage implements AfterViewInit, OnDestroy {
 
   patchSelected(change: Partial<ContainerConfig>): void {
     this.patchContainer(this.selected(), change);
+  }
+
+  patchPhase(phase: Phase, change: Partial<PhaseConfig>): void {
+    this.patchSelected({ [phase]: { ...this.current()[phase], ...change } });
+  }
+
+  /** Number of a numeric field, or `null` when empty. */
+  number(value: unknown): number | null {
+    return value === '' || value === null || value === undefined ? null : Number(value);
+  }
+
+  /** Whether the preset of the phase moves the panel (slide, scale or the layout default). */
+  movesPanel(phase: Phase): boolean {
+    return ['', 'slide', 'scale'].includes(this.current()[phase].preset);
+  }
+
+  easingLabel(easing: string, phase: Phase): string {
+    if (easing === '') return phase === 'show' ? '(padrão: decelerate)' : '(padrão: accelerate)';
+    if (easing === 'spring-bouncy') return 'spring({ stiffness: 200, damping: 12 })';
+    if (easing === 'spring') return 'spring()';
+    if (easing === 'cubic') return 'cubicBezier([...])';
+    return `SPLIT_EASINGS.${easing}`;
   }
 
   patchOpen(change: Partial<OpenConfig>): void {

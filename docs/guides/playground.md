@@ -67,6 +67,32 @@ const ref = manager.open(NoteTabComponent, {
 });
 ```
 
+Ligando a animação do `body-right` com o motor `css`, 300 ms nas duas fases, abertura com `fade` e `spring()`, e fechamento com `slide` descendo 40px, o código do body fica assim (com o import dos easings no topo):
+
+```ts
+import { spring } from '@split-window/angular';
+
+// ...
+
+registry.useBodyContainers({
+  right: {
+    animation: {
+      engine: 'css',
+      duration: 300,
+      show: {
+        preset: 'fade',
+        easing: spring(),
+      },
+      hide: {
+        preset: 'slide',
+        origin: 'bottom',
+        distance: 40,
+      },
+    },
+  },
+});
+```
+
 ## Campos
 
 | Grupo      | Campo                                                      | Opção                                                               |
@@ -79,7 +105,10 @@ const ref = manager.open(NoteTabComponent, {
 | Opções     | size                                                       | `size`                                                              |
 | Opções     | maxTabs, onFull, onReject                                  | `maxTabs`, `onFull`, `onReject` (estratégias pré-definidas)         |
 | Opções     | closeWhenEmpty                                             | `closeWhenEmpty` (padrão `true` no body, `false` na página)         |
-| Opções     | animation, engine, preset, duration                        | `animation: true` ou `{ engine, preset, duration }`                 |
+| Opções     | animation, animation.engine                                | `animation: true` ou `{ engine, ... }`                              |
+| Opções     | animation.show / animation.hide: preset, duration, delay   | `show`/`hide` (iguais nas duas fases: no topo de `animation`)       |
+| Opções     | easing (por fase)                                          | `SPLIT_EASINGS.*`, `spring()`, `cubicBezier([...])`                 |
+| Opções     | origin, distance (slide), scale (scale)                    | `origin`, `distance`, `scale`                                       |
 | Opções     | panelClass                                                 | `panelClass` (ex.: `demo-drawer`)                                   |
 | Opções     | backdrop                                                   | `backdrop` (só body)                                                |
 | Opções     | expand, expand.maxWidth, expand.margin, expand.align       | `expand: false` ou `{ maxWidth, margin, align }`                    |
@@ -96,6 +125,7 @@ const ref = manager.open(NoteTabComponent, {
 - O estado e as funções que geram as opções e o código ficam em [playground.model.ts](../../apps/demo-angular/src/app/pages/playground.model.ts): `containerOptions(key, config)`, `bodyConfig(state)`, `openOptions(state)` e `playgroundCode(state)`.
 - `mode: 'inline'` fica desabilitado nos containers do body, que não aceitam esse layout.
 - Desativar o container padrão faz o padrão voltar ao automático.
+- Cada fase tem o seu bloco (`animation.show` e `animation.hide`). `origin` e `distance` aparecem para `slide` (e para o preset do layout); `scale` e `origin`, para `scale`. Pontos inválidos em `cubicBezier([...])` mostram o `SplitInvalidOptionError` de `animation.<fase>.easing`.
 - `expand.maxWidth` aceita só dígitos (vira número em px) ou texto em `px`, `vw`, `vh` ou `%`. Outro valor mostra o `SplitInvalidOptionError`, e o container fica sem registro até a correção.
 - Com `maxTabs` e `onReject: 'throw'`, abrir além do limite mostra o `SplitContainerFullError`. Com `'cancel'`, a tela avisa que a aba foi cancelada (`ref.rejected`).
 - As funções `onFull`/`onReject` customizadas não estão no playground; veja o guia [Limite de abas](limite-de-abas.md).

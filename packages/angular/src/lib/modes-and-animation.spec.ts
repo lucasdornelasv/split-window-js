@@ -23,6 +23,7 @@ import {
   splitAnimationEngineRegistryFactory,
   provideSplitModes,
   SplitWindowController,
+  spring,
   type ContainerState,
   provideSplitWindows,
   type SplitAnimationContext,
@@ -386,6 +387,61 @@ describe('modes and animations', () => {
         'show:running',
         'show:done',
       ]);
+    });
+
+    it('each phase gets its own settings: show and hide over the shared options', async () => {
+      setup({
+        containerDefaults: { animation: { duration: 100, hide: { preset: 'fade' } } },
+      });
+      const { calls, fn, finish } = controlledEngine();
+      registry.registerContainer('a', hostEl(), {
+        mode: 'overlay',
+        side: 'left',
+        closeWhenEmpty: true,
+        animation: {
+          engine: fn,
+          easing: spring(),
+          show: { preset: 'scale', scale: 1.1 },
+          hide: { origin: 'bottom', distance: 24, preset: 'slide' },
+        },
+      });
+      const ref = manager.open(Tab, { containerKey: 'a' });
+      expect(calls[0].options).toEqual({
+        preset: 'scale',
+        duration: 100,
+        easing: spring(),
+        delay: undefined,
+        origin: 'center',
+        distance: '100%',
+        scale: 1.1,
+        respectReducedMotion: true,
+      });
+      await finish();
+      void ref.close();
+      expect(calls[1].phase).toBe('hide');
+      expect(calls[1].options).toMatchObject({
+        preset: 'slide',
+        duration: 100,
+        origin: 'bottom',
+        distance: 24,
+      });
+      await finish();
+    });
+
+    it('the default origin of a slide is the container side', () => {
+      const { calls, fn } = controlledEngine();
+      registry.registerContainer('a', hostEl(), { mode: 'overlay', side: 'top', animation: fn });
+      manager.open(Tab, { containerKey: 'a' });
+      expect(calls[0].options).toMatchObject({ preset: 'slide', origin: 'top' });
+    });
+
+    it('invalid animation options throw on registration', () => {
+      expect(() =>
+        registry.registerContainer('a', hostEl(), { animation: { show: { scale: 0 } } }),
+      ).toThrow(SplitInvalidOptionError);
+      expect(() =>
+        registry.registerContainer('b', hostEl(), { animation: { origin: 'middle' as never } }),
+      ).toThrow(/animation\.origin/);
     });
 
     it('animation: false ends transitions synchronously', () => {

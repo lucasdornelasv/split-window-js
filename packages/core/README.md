@@ -70,6 +70,10 @@ O contrato fica no core: `SplitAnimationEngine` (`animate(ctx)` e `cleanup(ctx)`
 
 Motores prontos: `@split-window/css-animation` (classes de estado e `transitionend`) e `@split-window/keyframes-animation` (Web Animations). Os dois estendem `SplitAnimationEngine` e podem ser estendidos.
 
+Opções por fase: `animation.show` e `animation.hide` sobrescrevem as opções do topo (`preset`, `duration`, `easing`, `delay`, `origin`, `distance`, `scale`). `resolveAnimation(input, { layout, kind, side })` devolve as opções resolvidas das duas fases (o adaptador passa a da fase em `ctx.options`), `mergeAnimation` junta camadas e `validateAnimation` valida. Presets: `slide`, `fade`, `scale`, `collapse`, `none`; `slideTransform`, `scaleTransformOrigin`, `collapseReveal` e `presetAnimatesSizes` ajudam os motores.
+
+Easing como descrição: `cubicBezier([...])`, `linear([...])`, `steps(n)`, `spring({...})`, `customEasing(fn)` e `SPLIT_EASINGS`. Cada motor traduz: `easingToCss(easing)` para CSS e Web Animations (molas e funções viram um `linear()` amostrado) e `toEasingFunction(easing)` para motores que calculam os quadros. Tipos próprios (`{ type: 'meu', ... }`) passam na validação e são traduzidos pelo motor que os conhece.
+
 ## Utilitários
 
 `isPromiseLike`, `SplitStyleStash` (estilos, classes e atributos com desfazer), `toClassList`, `maxCssTime`, `transitionTimeMs` e `reflow`, usados pelos pacotes derivados. Os auxiliares de DOM usam tipos estruturais, então o core continua sem depender da lib DOM.

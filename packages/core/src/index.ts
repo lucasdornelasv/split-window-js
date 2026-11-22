@@ -25,5 +25,6 @@ export {
   type SplitTransitionPlan,
 } from './engine/base-split-window-engine.js';
 export * from './animation/animation-engine.js';
+export * from './animation/easing.js';
 export * from './geometry/geometry.js';
 export * from './utils/index.js';

@@ -93,7 +93,13 @@ class MemoryEngine extends BaseSplitWindowEngine<string, Host, unknown, string> 
         from: frame,
         to: frame,
         properties: { host: null, push: null },
-        options: { preset: 'slide', respectReducedMotion: true },
+        options: {
+          preset: 'slide',
+          origin: 'right',
+          distance: '100%',
+          scale: 0.9,
+          respectReducedMotion: true,
+        },
       },
     };
   }
@@ -290,6 +296,18 @@ describe('SplitAnimationEngineRegistry', () => {
     expect(registry.has('none')).toBe(true);
     expect(registry.has('missing')).toBe(false);
     expect(registry.get('missing')).toBeUndefined();
+  });
+
+  it('creates the noop engine only on first use, then reuses it', () => {
+    const registry = new SplitAnimationEngineRegistry<string>();
+    const lazy = registry as unknown as { noopEngine: unknown };
+    registry.register('first', new Named());
+    registry.resolve();
+    expect(lazy.noopEngine).toBeNull();
+    const noop = registry.resolve('none');
+    expect(noop).toBeInstanceOf(NoopSplitAnimationEngine);
+    expect(registry.get('none')).toBe(noop);
+    expect(new SplitAnimationEngineRegistry<string>().resolve()).not.toBe(noop);
   });
 
   it('resolves instances, classes and functions; rejects bad names and values', () => {

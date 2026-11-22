@@ -1,11 +1,16 @@
 import {
   SplitAnimationEngine,
-  defaultEasing,
   SplitStyleStash,
+  collapseReveal,
+  defaultEasing,
+  easingToCss,
+  presetAnimatesSizes,
   reflow,
+  scaleTransformOrigin,
+  slideTransform,
   transitionTimeMs,
   type SplitAnimationContext,
-  type SplitBodySide,
+  type SplitEasingInput,
 } from '@split-window/core';
 import { SPLIT_CSS_ANIMATION_STYLES, SPLIT_CSS_ANIMATION_STYLE_ID } from './styles.js';
 
@@ -43,25 +48,19 @@ export interface SplitCssFlipTarget {
   to: string;
 }
 
-const SLIDE: Record<SplitBodySide, string> = {
-  left: 'translateX(-100%)',
-  right: 'translateX(100%)',
-  top: 'translateY(-100%)',
-  bottom: 'translateY(100%)',
-};
-
 /**
  * CSS engine, in the style of `ngbRunTransition`: toggles state classes on the shell and the
  * backdrop, waits for `transitionend`/`animationend` (with a timeout from the computed
  * durations) and ends at once when there is no transition.
  *
- * The look comes from CSS: the built-in presets (`slide`, `fade`, `collapse`) are injected
- * once per document; any other look is a class of your own (`panelClass`) with rules for the
- * state classes. Sizes that change with the layout (host width, push padding) are animated
- * with inline transitions between the frames.
+ * The look comes from CSS: the built-in presets (`slide`, `fade`, `scale`, `collapse`) are
+ * injected once per document; any other look is a class of your own (`panelClass`) with
+ * rules for the state classes. Each phase sets its own preset, so a fade in and a slide out
+ * work. Sizes that change with the layout (host width, push padding) are animated with
+ * inline transitions between the frames.
  *
- * Extend it and override `classesFor`, `prepare`, `flipTargets`, `waitFor`, `finish` or
- * `duration`.
+ * Extend it and override `classesFor`, `prepare`, `flipTargets`, `waitFor`, `finish`,
+ * `duration`, `easing` or `translateEasing`.
  */
 export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
   private readonly stashes = new WeakMap<SplitAnimationContext<HTMLElement>, SplitStyleStash>();
@@ -143,15 +142,18 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
     if (backdrop && options.preset !== 'none') {
       stash.setAttribute(backdrop, 'data-split-animation', 'fade');
     }
-    stash.set(shell, '--split-slide', SLIDE[ctx.side]);
+    stash.set(shell, '--split-slide', slideTransform(options.origin, options.distance));
+    stash.set(shell, '--split-scale', `${options.scale}`);
+    stash.set(shell, '--split-transform-origin', scaleTransformOrigin(options.origin));
     if (options.duration !== undefined) {
       stash.set(shell, '--split-animation-duration', `${options.duration}ms`);
       if (backdrop) stash.set(backdrop, '--split-animation-duration', `${options.duration}ms`);
     }
     if (options.easing !== undefined) {
+      const easing = this.translateEasing(options.easing, ctx);
       for (const el of backdrop ? [shell, backdrop] : [shell]) {
-        stash.set(el, '--split-animation-easing', options.easing);
-        stash.set(el, '--split-animation-easing-hide', options.easing);
+        stash.set(el, '--split-animation-easing', easing);
+        stash.set(el, '--split-animation-easing-hide', easing);
       }
     }
     if (options.delay !== undefined)
@@ -166,14 +168,28 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
 
   /**
    * Whether the sizes that change with the layout (host size, push padding) are animated:
-   * with `slide` and `collapse`. With `fade` (and `none`) they change at once: the open layout
-   * is applied at the start of a show and removed only after a hide.
+   * with `slide` and `collapse`. With the others they change at once: the open layout is
+   * applied at the start of a show and removed only after a hide.
    */
   protected animatesSizes(ctx: SplitAnimationContext<HTMLElement>): boolean {
-    return ctx.options.preset === 'slide' || ctx.options.preset === 'collapse';
+    return presetAnimatesSizes(ctx.options.preset);
   }
 
-  /** Sizes animated with inline transitions. */
+  /**
+   * Translates an easing to CSS (`cubicBezier([0.2, 0, 0, 1])` → `cubic-bezier(0.2, 0, 0, 1)`,
+   * springs to a sampled `linear()`). Override it to support easings of your own type.
+   */
+  protected translateEasing(
+    easing: SplitEasingInput,
+    _ctx: SplitAnimationContext<HTMLElement>,
+  ): string {
+    return easingToCss(easing);
+  }
+
+  /**
+   * Properties animated with inline transitions: the host size, the push padding and, in a
+   * `collapse`, the reveal of the panel (`collapseReveal`), in step with them.
+   */
   protected flipTargets(ctx: SplitAnimationContext<HTMLElement>): SplitCssFlipTarget[] {
     if (!this.animatesSizes(ctx)) return [];
     const targets: SplitCssFlipTarget[] = [];
@@ -192,6 +208,16 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
         property: properties.push,
         from: from.push,
         to: to.push,
+      });
+    }
+    const reveal = collapseReveal(ctx);
+    if (reveal) {
+      const show = ctx.phase === 'show';
+      targets.push({
+        element: elements.shell,
+        property: reveal.property,
+        from: show ? reveal.closed : reveal.open,
+        to: show ? reveal.open : reveal.closed,
       });
     }
     return targets;
@@ -259,7 +285,10 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
   protected easing(ctx: SplitAnimationContext<HTMLElement>): string {
     const variable =
       ctx.phase === 'hide' ? '--split-animation-easing-hide' : '--split-animation-easing';
-    return ctx.options.easing ?? (cssVar(ctx.elements.shell, variable) || defaultEasing(ctx.phase));
+    if (ctx.options.easing !== undefined) return this.translateEasing(ctx.options.easing, ctx);
+    return (
+      cssVar(ctx.elements.shell, variable) || this.translateEasing(defaultEasing(ctx.phase), ctx)
+    );
   }
 }
 

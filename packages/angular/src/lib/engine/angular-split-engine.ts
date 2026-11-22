@@ -583,7 +583,7 @@ export class AngularSplitEngine extends BaseSplitWindowEngine<
           host: push && resolved.kind === 'custom' ? axisOf(resolved.side) : null,
           push: push && resolved.kind === 'body' ? `padding-${resolved.side}` : null,
         },
-        options: resolved.animation,
+        options: resolved.animation[phase],
       },
     };
   }

@@ -2,8 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   SPLIT_DEFAULT_EASING,
   SPLIT_DEFAULT_HIDE_EASING,
+  easingToCss,
+  spring,
   type SplitAnimationContext,
+  type SplitEasingInput,
   type SplitAnimationFrame,
+  type SplitAnimationSettings,
 } from '@split-window/core';
 import {
   SPLIT_CSS_ANIMATION_STYLE_ID,
@@ -19,7 +23,11 @@ const frame = (patch: Partial<SplitAnimationFrame> = {}): SplitAnimationFrame =>
   ...patch,
 });
 
-function context(patch: Partial<SplitAnimationContext<HTMLElement>> = {}) {
+type ContextPatch = Partial<Omit<SplitAnimationContext<HTMLElement>, 'options'>> & {
+  options?: Partial<SplitAnimationSettings>;
+};
+
+function context({ options, ...patch }: ContextPatch = {}) {
   const shell = document.createElement('div');
   const host = document.createElement('div');
   document.body.append(host);
@@ -36,7 +44,14 @@ function context(patch: Partial<SplitAnimationContext<HTMLElement>> = {}) {
     from: frame({ rect: { x: 100, y: 0, width: 100, height: 100 } }),
     to: frame(),
     properties: { host: null, push: null },
-    options: { preset: 'slide', respectReducedMotion: true },
+    options: {
+      preset: 'slide',
+      origin: 'right',
+      distance: '100%',
+      scale: 0.9,
+      respectReducedMotion: true,
+      ...options,
+    },
     reducedMotion: false,
     signal: abort.signal,
     started: () => events.push('started'),
@@ -130,6 +145,49 @@ describe('SplitCssAnimationEngine', () => {
     expect(target.style.paddingRight).toBe(before);
   });
 
+  it('collapse reveals the panel like a curtain, in step with the push padding', () => {
+    const engine = new SplitCssAnimationEngine();
+    const target = document.createElement('main');
+    const push = {
+      layout: 'push' as const,
+      options: { preset: 'collapse' as const, duration: 300, easing: 'linear' },
+      from: frame({ push: '0px' }),
+      to: frame({ push: '300px' }),
+      properties: { host: null, push: 'padding-right' },
+    };
+    const show = context(push);
+    const showCtx = { ...show.ctx, elements: { ...show.ctx.elements, pushTarget: target } };
+    void engine.animate(showCtx);
+    expect(show.shell.style.clipPath).toBe('inset(0px)');
+    expect(show.shell.style.transition).toBe('clip-path 300ms linear 0ms');
+    expect(target.style.transition).toBe('padding-right 300ms linear 0ms');
+    engine.cleanup(showCtx);
+    expect(show.shell.style.clipPath).toBe('');
+
+    const hide = context({ ...push, phase: 'hide', side: 'left' });
+    void engine.animate({ ...hide.ctx, elements: { ...hide.ctx.elements, pushTarget: target } });
+    expect(hide.shell.style.clipPath).toBe('inset(0px 100% 0px 0px)');
+
+    // overlay: the clip alone
+    const overlay = context({ options: { preset: 'collapse', duration: 300 } });
+    void engine.animate(overlay.ctx);
+    expect(overlay.shell.style.clipPath).toBe('inset(0px)');
+    expect(overlay.shell.style.transition).toContain('clip-path 300ms');
+
+    // custom push: the host grows and the shell is held in its final place
+    const custom = context({
+      layout: 'push',
+      options: { preset: 'collapse', duration: 300 },
+      from: frame({ hostSize: '0px' }),
+      to: frame({ hostSize: '300px' }),
+      properties: { host: 'width', push: null },
+    });
+    void engine.animate(custom.ctx);
+    expect(custom.host.style.width).toBe('300px');
+    expect(custom.shell.style.transform).toBe('none');
+    expect(custom.shell.style.transition).toContain('transform 300ms');
+  });
+
   it('decelerates the inline transitions on show and accelerates them on hide', () => {
     const engine = new SplitCssAnimationEngine();
     const push = {
@@ -141,10 +199,10 @@ describe('SplitCssAnimationEngine', () => {
     };
     const show = context(push);
     void engine.animate(show.ctx);
-    expect(show.host.style.transition).toContain(SPLIT_DEFAULT_EASING);
+    expect(show.host.style.transition).toContain(easingToCss(SPLIT_DEFAULT_EASING));
     const hide = context({ ...push, phase: 'hide' });
     void engine.animate(hide.ctx);
-    expect(hide.host.style.transition).toContain(SPLIT_DEFAULT_HIDE_EASING);
+    expect(hide.host.style.transition).toContain(easingToCss(SPLIT_DEFAULT_HIDE_EASING));
   });
 
   it('sets both easing variables from the easing option', () => {
@@ -154,6 +212,55 @@ describe('SplitCssAnimationEngine', () => {
     void new SplitCssAnimationEngine().animate(ctx);
     expect(shell.style.getPropertyValue('--split-animation-easing')).toBe('linear');
     expect(shell.style.getPropertyValue('--split-animation-easing-hide')).toBe('linear');
+  });
+
+  it('sets the slide transform from origin/distance and the scale variables', () => {
+    const engine = new SplitCssAnimationEngine();
+    const slide = context({ options: { preset: 'slide', origin: 'top', distance: 48 } });
+    slide.shell.style.transitionDuration = '5s';
+    void engine.animate(slide.ctx);
+    expect(slide.shell.getAttribute('data-split-animation')).toBe('slide');
+    expect(slide.shell.style.getPropertyValue('--split-slide')).toBe('translateY(-48px)');
+
+    const scale = context({
+      phase: 'hide',
+      options: { preset: 'scale', scale: 1.15, origin: 'left' },
+    });
+    scale.shell.style.transitionDuration = '5s';
+    void engine.animate(scale.ctx);
+    expect(scale.shell.getAttribute('data-split-animation')).toBe('scale');
+    expect(scale.shell.style.getPropertyValue('--split-scale')).toBe('1.15');
+    expect(scale.shell.style.getPropertyValue('--split-transform-origin')).toBe('left center');
+    expect(scale.shell.classList).toContain('split-hiding');
+    expect(document.getElementById(SPLIT_CSS_ANIMATION_STYLE_ID)?.textContent).toContain(
+      "[data-split-animation='scale']:is(.split-enter-from, .split-hiding) { transform: scale(var(--split-scale)); }",
+    );
+  });
+
+  it('translates easing objects and lets subclasses translate their own types', () => {
+    const { ctx, shell } = context({
+      options: { preset: 'fade', easing: spring({ samples: 3 }) },
+    });
+    void new SplitCssAnimationEngine().animate(ctx);
+    expect(shell.style.getPropertyValue('--split-animation-easing')).toMatch(/^linear\(0, /);
+
+    class Elastic extends SplitCssAnimationEngine {
+      protected override translateEasing(easing: SplitEasingInput): string {
+        return typeof easing === 'object' && easing.type === 'elastic'
+          ? 'cubic-bezier(0.5, 1.6, 0.4, 0.7)'
+          : easingToCss(easing);
+      }
+    }
+    const custom = context({ options: { preset: 'fade', easing: { type: 'elastic' } } });
+    void new Elastic().animate(custom.ctx);
+    expect(custom.shell.style.getPropertyValue('--split-animation-easing')).toBe(
+      'cubic-bezier(0.5, 1.6, 0.4, 0.7)',
+    );
+    expect(() =>
+      new SplitCssAnimationEngine().animate(
+        context({ options: { preset: 'fade', easing: { type: 'elastic' } } }).ctx,
+      ),
+    ).toThrow(/elastic/);
   });
 
   it('does not animate the sizes with fade: the open layout stays during the transition', () => {

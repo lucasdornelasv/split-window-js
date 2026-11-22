@@ -1,8 +1,13 @@
 import {
   SplitAnimationEngine,
+  collapseReveal,
   defaultEasing,
+  easingToCss,
+  presetAnimatesSizes,
+  scaleTransformOrigin,
+  slideTransform,
   type SplitAnimationContext,
-  type SplitAnimationFrame,
+  type SplitEasingInput,
 } from '@split-window/core';
 
 /** Keyframes, or a function that builds them from the context (frames, side...). */
@@ -77,11 +82,23 @@ export class SplitKeyframesAnimationEngine extends SplitAnimationEngine<HTMLElem
     this.running.delete(ctx);
   }
 
+  /**
+   * Translates an easing to the Web Animations API, which takes CSS easings
+   * (`cubicBezier([0.2, 0, 0, 1])` → `cubic-bezier(0.2, 0, 0, 1)`, springs to a sampled
+   * `linear()`). Override it to support easings of your own type.
+   */
+  protected translateEasing(
+    easing: SplitEasingInput,
+    _ctx: SplitAnimationContext<HTMLElement>,
+  ): string {
+    return easingToCss(easing);
+  }
+
   /** Timing of every animation of the transition. */
   protected timing(ctx: SplitAnimationContext<HTMLElement>): KeyframeAnimationOptions {
     return {
       duration: ctx.options.duration ?? 200,
-      easing: ctx.options.easing ?? defaultEasing(ctx.phase),
+      easing: this.translateEasing(ctx.options.easing ?? defaultEasing(ctx.phase), ctx),
       delay: ctx.options.delay ?? 0,
       // Holds the end state until `cleanup`, which runs right before the final layout.
       fill: 'both',
@@ -128,30 +145,51 @@ export class SplitKeyframesAnimationEngine extends SplitAnimationEngine<HTMLElem
 
   /**
    * Whether the preset animates the sizes that change with the layout (host size, push
-   * padding): with `slide` and `collapse`. With `fade` they change at once: the open layout
-   * is applied at the start of a show and removed only after a hide.
+   * padding): with `slide` and `collapse`. With the others they change at once: the open
+   * layout is applied at the start of a show and removed only after a hide.
    */
   protected animatesSizes(ctx: SplitAnimationContext<HTMLElement>): boolean {
-    return ctx.options.preset === 'slide' || ctx.options.preset === 'collapse';
+    return presetAnimatesSizes(ctx.options.preset);
   }
 
-  /** Keyframes of the shell for the preset. */
+  /**
+   * Keyframes of the shell for the preset of the phase, from the out-of-view state to the
+   * open one on show and back on hide: `slide` (`origin`, `distance`), `scale` (`scale`,
+   * anchored at `origin`), `fade` and `collapse` (a curtain: the panel stays still and shows
+   * from the edge at its side, `collapseReveal`).
+   */
   protected shellKeyframes(ctx: SplitAnimationContext<HTMLElement>): Keyframe[] {
-    const { from, to, phase } = ctx;
-    // The shell sits at its open position during the whole transition.
-    const open = phase === 'show' ? to : from;
-    const translate = (frame: SplitAnimationFrame) =>
-      `translate(${frame.rect.x - open.rect.x}px, ${frame.rect.y - open.rect.y}px)`;
-    switch (ctx.options.preset) {
+    const { options, phase } = ctx;
+    let out: Keyframe;
+    let open: Keyframe;
+    switch (options.preset) {
       case 'slide':
-        return [{ transform: translate(from) }, { transform: translate(to) }];
+        out = { transform: slideTransform(options.origin, options.distance) };
+        open = { transform: 'none' };
+        break;
+      case 'scale': {
+        const transformOrigin = scaleTransformOrigin(options.origin);
+        out = { transform: `scale(${options.scale})`, transformOrigin };
+        open = { transform: 'none', transformOrigin };
+        break;
+      }
       case 'fade':
-        return phase === 'show'
-          ? [{ opacity: 0 }, { opacity: 1 }]
-          : [{ opacity: 1 }, { opacity: 0 }];
+        out = { opacity: 0 };
+        open = { opacity: 1 };
+        break;
+      case 'collapse': {
+        // A curtain: the panel stays still and shows from the edge at its side.
+        const reveal = collapseReveal(ctx);
+        if (!reveal) return [];
+        const key = reveal.property === 'clip-path' ? 'clipPath' : 'transform';
+        out = { [key]: reveal.closed };
+        open = { [key]: reveal.open };
+        break;
+      }
       default:
         return [];
     }
+    return phase === 'show' ? [out, open] : [open, out];
   }
 
   private read(

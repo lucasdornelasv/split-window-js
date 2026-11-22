@@ -4,8 +4,28 @@ Os pacotes `@split-window/core`, `@split-window/css-animation`, `@split-window/k
 
 ## Não publicado
 
+### Mudanças que quebram compatibilidade
+
+- `SPLIT_DEFAULT_EASING` e `defaultEasing(phase)` devolvem um objeto de easing (`SPLIT_EASINGS.decelerate`), não mais um texto CSS. Use `easingToCss(SPLIT_DEFAULT_EASING)` para o texto.
+- `SplitAnimationSettings` (o `ctx.options` dos motores) traz as opções de uma fase e ganha `origin`, `distance` e `scale`; `easing` passa a ser `SplitEasingInput`. `SplitResolvedMode.animation` agora é `{ show, hide }`.
+- O preset `slide` do motor de keyframes passa a mover por `origin`/`distance` (`translateX(100%)`...) em vez dos píxeis medidos nos frames; o resultado padrão é o mesmo.
+- `animation` em texto só aceita os presets (`slide`, `fade`, `scale`, `collapse`, `none`); outros textos lançam `SplitInvalidOptionError`. As opções de animação passam a ser validadas no registro (`animation.duration`, `animation.show.scale`...).
+
+### Novidades
+
+- Animação separada por fase: `animation.show` (abertura) e `animation.hide` (fechamento) sobrescrevem as opções do topo, com um preset ou um objeto: `{ show: 'fade', hide: { preset: 'slide', origin: 'bottom' } }`.
+- `origin` e `distance`: lado de onde o `slide` vem e para onde vai (padrão: o lado do container) e quanto ele anda (px ou comprimento CSS; padrão `'100%'`).
+- Preset `scale`, com a opção `scale` (padrão `0.9`): abaixo de 1 o painel cresce até o tamanho final, acima de 1 encolhe até ele; `origin` ancora a escala numa borda ou no centro.
+- Easing como descrição traduzida por cada motor: `cubicBezier([0.2, 0, 0, 1])`, `linear([...])`, `steps(n, posição)`, `spring({ stiffness, damping, mass, velocity })`, `customEasing(fn)` e `SPLIT_EASINGS` (`linear`, `ease`, `easeIn`, `easeOut`, `easeInOut`, `decelerate`, `accelerate`). `easingToCss` traduz para CSS e Web Animations (molas e funções viram `linear()` amostrado) e `toEasingFunction` devolve a curva como função. Os motores CSS e keyframes ganham `translateEasing(easing, ctx)` para tipos próprios.
+- Core: `resolveAnimation`, `normalizeAnimationPhase`, `validateAnimation`, `slideTransform`, `scaleTransformOrigin`, `presetAnimatesSizes`, `SPLIT_ANIMATION_PRESETS`, `SPLIT_DEFAULT_ANIMATION_SCALE` e `SPLIT_DEFAULT_ANIMATION_DISTANCE` (todos reexportados pelo Angular, junto com os easings).
+- Playground: opções de `show` e `hide` por container (preset, duração, delay, easing, origin, distance, scale), com o código gerado juntando no topo o que é igual nas duas fases.
+
+### Correções
+
+- Preset `collapse` passa a ser uma cortina em todos os layouts: o painel fica parado no lugar final e é revelado a partir da borda do lado do conteúdo. Antes, no push do body o painel aparecia inteiro na hora (só a página se mexia), no overlay e no inline nada se mexia, e no push custom o painel parecia deslizar junto com o host. Agora a revelação anda no mesmo ritmo do padding da página (push do body) ou do host (push custom). Novo `collapseReveal(ctx)` no core, usado pelos motores CSS e keyframes.
 - Preset `fade` no `push`: os motores CSS e keyframes não animam mais o tamanho do host nem o padding da página com `fade` (só com `slide` e `collapse`). Ao abrir, o conteúdo encolhe na hora e o painel aparece com fade; ao fechar, o conteúdo volta ao tamanho normal só depois do fim do fade. Novo método protegido `animatesSizes(ctx)` nos dois motores.
 - Easing padrão por fase: a abertura continua desacelerando (`SPLIT_DEFAULT_EASING`) e o fechamento passa a acelerar (`SPLIT_DEFAULT_HIDE_EASING`, `cubic-bezier(0.4, 0, 1, 1)`). Com a curva antiga, o painel parecia sumido bem antes do fim e a página voltando no `push` parecia atrasada. Novos `defaultEasing(phase)` (core, reexportado pelo Angular) e variável CSS `--split-animation-easing-hide`. A opção `easing` continua valendo para as duas fases.
+- O `NoopSplitAnimationEngine` do `SplitAnimationEngineRegistry` e do `BaseSplitWindowEngine` é criado só no primeiro uso (`'none'`, nenhum motor registrado ou movimento reduzido) e reaproveitado depois.
 
 ## 0.5.0 — 2026-11-21
 

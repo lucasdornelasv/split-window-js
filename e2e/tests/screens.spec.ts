@@ -129,6 +129,159 @@ test.describe('Modos e animação', () => {
       .toBe('0px');
   });
 
+  test('the guide example matches the generated code', async ({ page }) => {
+    await gotoPage(page, 'playground');
+    await page.locator('[data-edit="body-right"]').click();
+    await page.locator('[data-field="animation"]').check();
+    await page.locator('[data-field="engine"]').selectOption('css');
+    for (const phase of ['show', 'hide']) {
+      await page.locator(`[data-field="${phase}-duration"]`).fill('300');
+    }
+    await page.locator('[data-field="show-preset"]').selectOption('fade');
+    await page.locator('[data-field="show-easing"]').selectOption('spring');
+    await page.locator('[data-field="hide-preset"]').selectOption('slide');
+    await page.locator('[data-field="hide-origin"]').selectOption('bottom');
+    await page.locator('[data-field="hide-distance"]').fill('40');
+    const code = page.locator('demo-example[data-example="playground"] pre code');
+    await expect(code).toContainText("import { spring } from '@split-window/angular';");
+    await expect(code).toContainText(
+      [
+        'registry.useBodyContainers({',
+        '  right: {',
+        '    animation: {',
+        "      engine: 'css',",
+        '      duration: 300,',
+        '      show: {',
+        "        preset: 'fade',",
+        '        easing: spring(),',
+        '      },',
+        '      hide: {',
+        "        preset: 'slide',",
+        "        origin: 'bottom',",
+        '        distance: 40,',
+        '      },',
+        '    },',
+        '  },',
+        '});',
+      ].join('\n'),
+    );
+  });
+
+  // collapse: a curtain. The panel stays still in its final place and shows from the edge
+  // on the content side; in the body push, the shown part is the space the page gave.
+  const collapseCases = [
+    ['css', 'body-right', 'push'],
+    ['keyframes', 'body-right', 'push'],
+    ['css', 'body-right', 'overlay'],
+    ['keyframes', 'body-right', 'overlay'],
+    ['css', 'direito', 'push'],
+    ['css', 'direito', 'overlay'],
+  ] as const;
+  for (const [engine, key, mode] of collapseCases) {
+    test(`collapse reveals the panel like a curtain (${key}, ${mode}, ${engine})`, async ({
+      page,
+    }) => {
+      await gotoPage(page, 'playground');
+      if (key === 'direito') await page.locator('[data-enable="direito"]').check();
+      await page.locator(`[data-edit="${key}"]`).click();
+      await page.locator('[data-field="mode"]').selectOption(mode);
+      await page.locator('[data-field="size"]').fill('300px');
+      if (key === 'direito') await page.locator('[data-field="closeWhenEmpty"]').check();
+      await page.locator('[data-field="animation"]').check();
+      await page.locator('[data-field="engine"]').selectOption(engine);
+      for (const phase of ['show', 'hide']) {
+        await page.locator(`[data-field="${phase}-preset"]`).selectOption('collapse');
+        await page.locator(`[data-field="${phase}-duration"]`).fill('800');
+      }
+      await page.locator('[data-field="target"]').selectOption(key);
+      // On every frame: where the panel is, how much of it shows and how much the page moved.
+      await page.evaluate((containerKey) => {
+        type Sample = { right: number; shown: number; pushed: number };
+        const w = window as unknown as { samples: Sample[] };
+        w.samples = [];
+        const start = parseFloat(getComputedStyle(document.body).paddingRight);
+        // A clip-path inset component: px, % of the width or calc(% + px).
+        const length = (value: string, width: number) => {
+          const percent = /(-?[\d.]+)%/.exec(value);
+          const px = /(-?[\d.]+)px/.exec(value);
+          return (percent ? (Number(percent[1]) * width) / 100 : 0) + (px ? Number(px[1]) : 0);
+        };
+        const tick = () => {
+          const shell = document.querySelector<HTMLElement>(
+            `split-container[data-container-key="${containerKey}"]`,
+          );
+          // Only during the transitions, so the page stays light.
+          if (shell?.classList.contains('split-animating')) {
+            const rect = shell.getBoundingClientRect();
+            const clip = getComputedStyle(shell).clipPath;
+            const parts = clip.startsWith('inset(') ? clip.slice(6, -1).split(/ (?![^(]*\))/) : [];
+            // inset(top right bottom left): the left inset hides the content side.
+            const hidden = parts.length === 4 ? length(parts[3], rect.width) : 0;
+            // A host in push clips the panel itself.
+            const host = shell.parentElement!.getBoundingClientRect();
+            const clipped = Math.max(
+              0,
+              Math.min(rect.right, host.right) - Math.max(rect.left, host.left),
+            );
+            const shown = parts.length === 4 ? rect.width - hidden : Math.min(clipped, rect.width);
+            w.samples.push({
+              right: rect.right,
+              shown,
+              pushed: parseFloat(getComputedStyle(document.body).paddingRight) - start,
+            });
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      }, key);
+      const shell = container(page, key);
+      await page.locator('[data-action="open"]').click();
+      await expect(tabLabels(page, key)).toHaveText(['Nova aba']);
+      await expect(shell).not.toHaveClass(/split-animating/);
+      const openRight = await shell.evaluate((el) => el.getBoundingClientRect().right);
+      await page.locator('[data-action="dismiss-all"]').click();
+      await expect(shell).toBeHidden();
+
+      const samples = await page.evaluate(
+        () =>
+          (window as unknown as { samples: { right: number; shown: number; pushed: number }[] })
+            .samples,
+      );
+      const moving = samples.filter((s) => s.shown > 5 && s.shown < 295);
+      expect(moving.length).toBeGreaterThan(5);
+      // The panel does not move: it is always at its final place.
+      for (const s of samples) expect(Math.abs(s.right - openRight)).toBeLessThan(2);
+      // In the body push, the shown part is the space the page gave.
+      if (key === 'body-right' && mode === 'push') {
+        for (const s of moving) expect(Math.abs(s.shown - s.pushed)).toBeLessThan(20);
+      }
+    });
+  }
+
+  test('each phase plays its own preset: fade in, scale out', async ({ page }) => {
+    await gotoPage(page, 'playground');
+    await page.locator('[data-edit="body-right"]').click();
+    await page.locator('[data-field="animation"]').check();
+    await page.locator('[data-field="engine"]').selectOption('css');
+    await page.locator('[data-field="show-preset"]').selectOption('fade');
+    await page.locator('[data-field="hide-preset"]').selectOption('scale');
+    await page.locator('[data-field="hide-scale"]').fill('1.3');
+    for (const phase of ['show', 'hide']) {
+      await page.locator(`[data-field="${phase}-duration"]`).fill('1500');
+    }
+    const shell = container(page, 'body-right');
+    await page.locator('[data-action="open"]').click();
+    await expect(shell).toHaveAttribute('data-split-animation', 'fade');
+    await expect(shell).toHaveClass(/split-showing/);
+    await expect(shell).not.toHaveClass(/split-animating/);
+    await page.locator('[data-action="dismiss-all"]').click();
+    await expect(shell).toHaveAttribute('data-split-animation', 'scale');
+    expect(await shell.evaluate((el) => el.style.getPropertyValue('--split-scale'))).toBe('1.3');
+    // Growing toward 1.3: the panel gets wider than its 360px.
+    await expect.poll(async () => (await shell.boundingBox())?.width ?? 0).toBeGreaterThan(370);
+    await expect(page.locator('.split-body-host--right')).toBeHidden();
+  });
+
   for (const engine of ['css', 'keyframes']) {
     test(`push with fade (${engine}): the page resizes at once on show and after the fade on hide`, async ({
       page,
@@ -139,8 +292,10 @@ test.describe('Modos e animação', () => {
       await page.locator('[data-field="size"]').fill('300px');
       await page.locator('[data-field="animation"]').check();
       await page.locator('[data-field="engine"]').selectOption(engine);
-      await page.locator('[data-field="preset"]').selectOption('fade');
-      await page.locator('[data-field="duration"]').fill('600');
+      for (const phase of ['show', 'hide']) {
+        await page.locator(`[data-field="${phase}-preset"]`).selectOption('fade');
+        await page.locator(`[data-field="${phase}-duration"]`).fill('600');
+      }
       // Samples the padding of the page and the panel visibility on every frame.
       const base = await page.evaluate(() => {
         const w = window as unknown as { samples: { padding: number; open: boolean }[] };
@@ -352,11 +507,48 @@ test.describe('Playground', () => {
     await page.locator('[data-field="animation"]').check();
     await expect(code(page)).toContainText('animation: true');
     await page.locator('[data-field="engine"]').selectOption('keyframes');
-    await page.locator('[data-field="preset"]').selectOption('fade');
-    await page.locator('[data-field="duration"]').fill('150');
+    // Equal in both phases: at the top of animation.
+    for (const phase of ['show', 'hide']) {
+      await page.locator(`[data-field="${phase}-duration"]`).fill('150');
+    }
     await expect(code(page)).toContainText("engine: 'keyframes'");
-    await expect(code(page)).toContainText("preset: 'fade'");
-    await expect(code(page)).toContainText('duration: 150');
+    await expect(code(page)).toContainText(
+      "animation: {\n    engine: 'keyframes',\n    duration: 150,\n  },",
+    );
+    // Different per phase: fade in, slide out toward the bottom by 40px, scale presets.
+    await page.locator('[data-field="show-preset"]').selectOption('fade');
+    await page.locator('[data-field="hide-preset"]').selectOption('slide');
+    await page.locator('[data-field="hide-origin"]').selectOption('bottom');
+    await page.locator('[data-field="hide-distance"]').fill('40');
+    await page.locator('[data-field="show-easing"]').selectOption('spring-bouncy');
+    await page.locator('[data-field="hide-easing"]').selectOption('cubic');
+    await page.locator('[data-field="hide-cubic"]').fill('0.3, 0, 0.2, 1');
+    await expect(code(page)).toContainText(
+      [
+        '    show: {',
+        "      preset: 'fade',",
+        '      easing: spring({ stiffness: 200, damping: 12 }),',
+        '    },',
+        '    hide: {',
+        "      preset: 'slide',",
+        '      easing: cubicBezier([0.3, 0, 0.2, 1]),',
+        "      origin: 'bottom',",
+        '      distance: 40,',
+        '    },',
+      ].join('\n'),
+    );
+    await expect(code(page)).toContainText(
+      "import { cubicBezier, spring } from '@split-window/angular';",
+    );
+    await page.locator('[data-field="hide-cubic"]').fill('2, 0, 0, 1');
+    await expect(page.locator('[data-field="error"]')).toContainText('animation.hide.easing');
+    await page.locator('[data-field="hide-cubic"]').fill('0.3, 0, 0.2, 1');
+    await page.locator('[data-field="show-preset"]').selectOption('scale');
+    await page.locator('[data-field="show-scale"]').fill('1.2');
+    await page.locator('[data-field="show-origin"]').selectOption('left');
+    await expect(code(page)).toContainText("preset: 'scale',");
+    await expect(code(page)).toContainText('scale: 1.2,');
+    await expect(page.locator('[data-field="error"]')).toHaveCount(0);
     await page.locator('[data-field="panelClass"]').fill('demo-drawer');
     await expect(code(page)).toContainText("panelClass: 'demo-drawer'");
     await page.locator('[data-field="expandMaxWidth"]').fill('60vw');

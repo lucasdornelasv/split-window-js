@@ -79,7 +79,12 @@ export abstract class BaseSplitWindowEngine<
   private readonly running = new Map<string, RunningTransition<THost, TElement>>();
   private readonly deferred = new Map<string, { handle: TabHandle; resolve: () => void }[]>();
   private readonly transitionsSubject = new Subject<SplitContainerTransitionEvent>();
-  private readonly noopEngine = new NoopSplitAnimationEngine<TElement>();
+  private lazyNoopEngine: NoopSplitAnimationEngine<TElement> | null = null;
+
+  /** Engine of the reduced-motion transitions, created on first use. */
+  private get noopEngine(): NoopSplitAnimationEngine<TElement> {
+    return (this.lazyNoopEngine ??= new NoopSplitAnimationEngine<TElement>());
+  }
 
   /** Every container transition: start, progress, end or cancel. */
   readonly transitions: Observable<SplitContainerTransitionEvent> =

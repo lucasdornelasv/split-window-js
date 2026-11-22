@@ -1,3 +1,4 @@
+import { validateAnimation } from '../animation/animation-engine.js';
 import { SplitInvalidOptionError } from '../errors/errors.js';
 import {
   SPLIT_BODY_SIDES,
@@ -138,13 +139,6 @@ export function validateContainerOptions(
       (typeof mode === 'object' && mode !== null);
     if (!ok) fail(p('mode'), mode, 'nome de modo, objeto, classe ou função');
   }
-  if (animation !== undefined) {
-    const ok =
-      typeof animation === 'boolean' ||
-      (typeof animation === 'string' && animation.trim() !== '') ||
-      typeof animation === 'function' ||
-      (typeof animation === 'object' && animation !== null);
-    if (!ok) fail(p('animation'), animation, 'boolean, preset, objeto, motor ou função');
-  }
+  validateAnimation(p('animation'), animation);
   optionalBoolean(p('backdrop'), all.backdrop);
 }

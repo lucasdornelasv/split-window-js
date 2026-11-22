@@ -2,8 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   SPLIT_DEFAULT_EASING,
   SPLIT_DEFAULT_HIDE_EASING,
+  cubicBezier,
+  easingToCss,
+  steps,
   type SplitAnimationContext,
   type SplitAnimationFrame,
+  type SplitAnimationSettings,
 } from '@split-window/core';
 import { SplitKeyframesAnimationEngine } from '../index.js';
 
@@ -41,7 +45,11 @@ function mockAnimate() {
   };
 }
 
-function context(patch: Partial<SplitAnimationContext<HTMLElement>> = {}) {
+type ContextPatch = Partial<Omit<SplitAnimationContext<HTMLElement>, 'options'>> & {
+  options?: Partial<SplitAnimationSettings>;
+};
+
+function context({ options, ...patch }: ContextPatch = {}) {
   const shell = document.createElement('div');
   const host = document.createElement('div');
   const abort = new AbortController();
@@ -55,7 +63,14 @@ function context(patch: Partial<SplitAnimationContext<HTMLElement>> = {}) {
     from: frame({ rect: { x: 100, y: 0, width: 100, height: 100 } }),
     to: frame(),
     properties: { host: null, push: null },
-    options: { preset: 'slide', respectReducedMotion: true },
+    options: {
+      preset: 'slide',
+      origin: 'right',
+      distance: '100%',
+      scale: 0.9,
+      respectReducedMotion: true,
+      ...options,
+    },
     reducedMotion: false,
     signal: abort.signal,
     started: vi.fn(),
@@ -70,7 +85,7 @@ afterEach(() => {
 });
 
 describe('SplitKeyframesAnimationEngine', () => {
-  it('slides the shell from the frames and resolves when the animations finish', async () => {
+  it('slides the shell in from its side and resolves when the animations finish', async () => {
     mockAnimate();
     const engine = new SplitKeyframesAnimationEngine();
     const { ctx, shell } = context({
@@ -80,8 +95,8 @@ describe('SplitKeyframesAnimationEngine', () => {
     expect(ctx.started).toHaveBeenCalled();
     expect(animations[0].el).toBe(shell);
     expect(animations[0].keyframes).toEqual([
-      { transform: 'translate(100px, 0px)' },
-      { transform: 'translate(0px, 0px)' },
+      { transform: 'translateX(100%)' },
+      { transform: 'none' },
     ]);
     expect(animations[0].options).toMatchObject({ duration: 50, fill: 'both' });
     resolveAll();
@@ -97,7 +112,7 @@ describe('SplitKeyframesAnimationEngine', () => {
     });
     const target = document.createElement('main');
     const backdrop = document.createElement('div');
-    const { ctx, host } = context({
+    const { ctx, host, shell } = context({
       phase: 'hide',
       layout: 'push',
       options: { preset: 'collapse', respectReducedMotion: true },
@@ -106,10 +121,10 @@ describe('SplitKeyframesAnimationEngine', () => {
       properties: { host: 'width', push: 'padding-right' },
     });
     void engine.animate({ ...ctx, elements: { ...ctx.elements, pushTarget: target, backdrop } });
-    expect(animations.map((a) => a.el)).toEqual([host, target, backdrop]);
-    expect(animations[0].keyframes).toEqual([{ width: '300px' }, { width: '0px' }]);
-    expect(animations[1].keyframes).toEqual([{ paddingRight: '300px' }, { paddingRight: '0px' }]);
-    expect(animations[2].keyframes).toEqual([{ opacity: 1 }, { opacity: 0.2 }]);
+    expect(animations.map((a) => a.el)).toEqual([shell, host, target, backdrop]);
+    expect(animations[1].keyframes).toEqual([{ width: '300px' }, { width: '0px' }]);
+    expect(animations[2].keyframes).toEqual([{ paddingRight: '300px' }, { paddingRight: '0px' }]);
+    expect(animations[3].keyframes).toEqual([{ opacity: 1 }, { opacity: 0.2 }]);
   });
 
   it('decelerates on show and accelerates on hide, unless an easing is given', () => {
@@ -123,9 +138,91 @@ describe('SplitKeyframesAnimationEngine', () => {
       }).ctx,
     );
     expect(animations.map((a) => a.options.easing)).toEqual([
-      SPLIT_DEFAULT_EASING,
-      SPLIT_DEFAULT_HIDE_EASING,
+      easingToCss(SPLIT_DEFAULT_EASING),
+      easingToCss(SPLIT_DEFAULT_HIDE_EASING),
       'linear',
+    ]);
+  });
+
+  it('builds slide and scale keyframes from origin, distance and scale', () => {
+    mockAnimate();
+    const engine = new SplitKeyframesAnimationEngine();
+    void engine.animate(context({ options: { origin: 'left', distance: '2rem' } }).ctx);
+    void engine.animate(
+      context({ phase: 'hide', options: { preset: 'scale', scale: 1.2, origin: 'bottom' } }).ctx,
+    );
+    void engine.animate(
+      context({ options: { preset: 'scale', scale: 0.8, origin: 'center' } }).ctx,
+    );
+    expect(animations[0].keyframes).toEqual([
+      { transform: 'translateX(-2rem)' },
+      { transform: 'none' },
+    ]);
+    expect(animations[1].keyframes).toEqual([
+      { transform: 'none', transformOrigin: 'center bottom' },
+      { transform: 'scale(1.2)', transformOrigin: 'center bottom' },
+    ]);
+    expect(animations[2].keyframes).toEqual([
+      { transform: 'scale(0.8)', transformOrigin: 'center' },
+      { transform: 'none', transformOrigin: 'center' },
+    ]);
+  });
+
+  it('collapse reveals the shell like a curtain in every layout', () => {
+    mockAnimate();
+    const engine = new SplitKeyframesAnimationEngine();
+    const target = document.createElement('main');
+    const body = context({
+      phase: 'hide',
+      layout: 'push',
+      options: { preset: 'collapse' },
+      from: frame({ push: '300px' }),
+      to: frame({ push: '0px' }),
+      properties: { host: null, push: 'padding-right' },
+    });
+    void engine.animate({ ...body.ctx, elements: { ...body.ctx.elements, pushTarget: target } });
+    expect(animations.map((a) => a.el)).toEqual([body.shell, target]);
+    expect(animations[0].keyframes).toEqual([
+      { clipPath: 'inset(0px 0px 0px 0px)' },
+      { clipPath: 'inset(0px 0px 0px 100%)' },
+    ]);
+
+    mockAnimate();
+    const overlay = context({ options: { preset: 'collapse' } });
+    void engine.animate(overlay.ctx);
+    expect(animations.map((a) => a.el)).toEqual([overlay.shell]);
+    expect(animations[0].keyframes).toEqual([
+      { clipPath: 'inset(0px 0px 0px 100%)' },
+      { clipPath: 'inset(0px 0px 0px 0px)' },
+    ]);
+
+    mockAnimate();
+    const custom = context({
+      layout: 'push',
+      options: { preset: 'collapse' },
+      from: frame({ hostSize: '0px' }),
+      to: frame({ hostSize: '300px' }),
+      properties: { host: 'width', push: null },
+    });
+    void engine.animate(custom.ctx);
+    expect(animations.map((a) => a.el)).toEqual([custom.shell, custom.host]);
+    expect(animations[0].keyframes).toEqual([
+      { transform: 'translateX(-100%)' },
+      { transform: 'none' },
+    ]);
+  });
+
+  it('translates easing objects to CSS easings', () => {
+    mockAnimate();
+    void new SplitKeyframesAnimationEngine().animate(
+      context({ options: { easing: cubicBezier([0.3, 0, 0.2, 1]) } }).ctx,
+    );
+    void new SplitKeyframesAnimationEngine().animate(
+      context({ options: { easing: steps(5) } }).ctx,
+    );
+    expect(animations.map((a) => a.options.easing)).toEqual([
+      'cubic-bezier(0.3, 0, 0.2, 1)',
+      'steps(5, jump-end)',
     ]);
   });
 
