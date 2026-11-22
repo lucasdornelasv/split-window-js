@@ -43,8 +43,8 @@ export const SPLIT_CONTAINER_DEFAULTS = new InjectionToken<SplitContainerDefault
  *
  * ```ts
  * animationEngines: {
- *   css: new SplitCssAnimationEngine(),
- *   keyframes: () => new SplitKeyframesAnimationEngine(inject(MY_KEYFRAMES)),
+ *   css: new CssSplitAnimationEngine(),
+ *   keyframes: () => new KeyframesSplitAnimationEngine(inject(MY_KEYFRAMES)),
  * }
  * ```
  */

@@ -1,15 +1,162 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  SPLIT_DEFAULT_EASING,
-  SPLIT_DEFAULT_HIDE_EASING,
-  cubicBezier,
-  easingToCss,
-  steps,
-  type SplitAnimationContext,
-  type SplitAnimationFrame,
-  type SplitAnimationSettings,
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+  SplitAnimationContext,
+  SplitAnimationFrame,
+  SplitAnimationSettings,
+  SplitEasingInput,
 } from '@split-window/core';
-import { SplitKeyframesAnimationEngine } from '../index.js';
+import {
+  splitAnimationEngineScenarios,
+  type SplitAnimationContractPreset,
+  type SplitAnimationEngineDriver,
+  type SplitAnimationRole,
+  type SplitAnimationTrack,
+} from '@split-window/core/testing';
+import { KeyframesSplitAnimationEngine, type KeyframesSplitAnimationPreset } from '../index.js';
+
+/*
+ * jsdom has no Web Animations API: `element.animate` is replaced by a fake that records the
+ * keyframes and timing, finishes on demand and rejects `finished` when cancelled, as a
+ * browser does.
+ */
+interface FakeAnimation {
+  el: Element;
+  keyframes: Keyframe[];
+  options: KeyframeAnimationOptions;
+  cancelled: boolean;
+  resolve: () => void;
+}
+
+let animations: FakeAnimation[] = [];
+const proto = HTMLElement.prototype as unknown as { animate?: unknown };
+const original = proto.animate;
+
+beforeEach(() => {
+  animations = [];
+  proto.animate = function (
+    this: Element,
+    keyframes: Keyframe[],
+    options: KeyframeAnimationOptions,
+  ) {
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    const finished = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    const animation: FakeAnimation = { el: this, keyframes, options, cancelled: false, resolve };
+    animations.push(animation);
+    return {
+      finished,
+      cancel: () => {
+        if (animation.cancelled) return;
+        animation.cancelled = true;
+        reject(new DOMException('The animation was cancelled', 'AbortError'));
+      },
+    } as unknown as Animation;
+  };
+});
+
+afterEach(() => {
+  proto.animate = original;
+});
+
+// ------------------------------------------------------------ contract
+
+class TranslatingKeyframesEngine extends KeyframesSplitAnimationEngine {
+  constructor(private readonly translator: (easing: SplitEasingInput) => string) {
+    super();
+  }
+
+  protected override translateEasing(easing: SplitEasingInput): string {
+    return this.translator(easing);
+  }
+}
+
+const roles = (ctx: SplitAnimationContext<HTMLElement>) =>
+  new Map<Element, SplitAnimationRole>(
+    (['shell', 'host', 'pushTarget', 'backdrop'] as const)
+      .filter((role) => ctx.elements[role] !== null)
+      .map((role) => [ctx.elements[role]!, role]),
+  );
+
+const kebab = (key: string) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+const NOT_PROPERTIES = new Set(['offset', 'easing', 'composite']);
+
+const camel = (property: string) =>
+  property.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+
+/** Keyframes of a preset of the contract: the shell goes from `from` (out of view) to `to`. */
+function presetKeyframes(preset: SplitAnimationContractPreset): KeyframesSplitAnimationPreset {
+  const frame = (end: 'from' | 'to') =>
+    Object.fromEntries(preset.shell.map((t) => [camel(t.property), t[end]]));
+  return { show: [frame('from'), frame('to')], sizes: preset.sizes };
+}
+
+const keyframesDriver: SplitAnimationEngineDriver<HTMLElement> = {
+  create(options) {
+    const engine = options?.translateEasing
+      ? new TranslatingKeyframesEngine(options.translateEasing)
+      : new KeyframesSplitAnimationEngine();
+    for (const [name, preset] of Object.entries(options?.presets ?? {})) {
+      expect(engine.addPreset(name, presetKeyframes(preset))).toBe(engine);
+    }
+    return engine;
+  },
+  elements() {
+    const [shell, host, pushTarget, backdrop] = ['div', 'div', 'main', 'div'].map((tag) =>
+      document.createElement(tag),
+    );
+    return { shell, host, pushTarget, backdrop };
+  },
+  start(engine, ctx) {
+    const first = animations.length;
+    const result = engine.animate(ctx);
+    const played = animations.slice(first);
+    const role = roles(ctx);
+    const tracks: SplitAnimationTrack[] = [];
+    for (const a of played) {
+      const start = a.keyframes[0] as Record<string, unknown>;
+      const end = a.keyframes[a.keyframes.length - 1] as Record<string, unknown>;
+      const keys = new Set([...Object.keys(start), ...Object.keys(end)]);
+      for (const key of keys) {
+        if (NOT_PROPERTIES.has(key)) continue;
+        tracks.push({
+          element: role.get(a.el)!,
+          property: kebab(key),
+          from: String(start[key]),
+          to: String(end[key]),
+        });
+      }
+    }
+    const options = played[0]?.options;
+    const timing = options
+      ? {
+          duration: Number(options.duration),
+          easing: String(options.easing),
+          delay: options.delay ?? 0,
+        }
+      : null;
+    return { result, tracks, timing };
+  },
+  finish(ctx) {
+    const role = roles(ctx);
+    for (const a of animations) if (role.has(a.el) && !a.cancelled) a.resolve();
+  },
+  snapshot(el) {
+    const running = animations.filter((a) => a.el === el && !a.cancelled).length;
+    const attributes = [...el.attributes].map((a) => `${a.name}=${a.value}`).sort();
+    return JSON.stringify({ attributes, running });
+  },
+};
+
+describe('KeyframesSplitAnimationEngine: contract of the animation engines', () => {
+  for (const scenario of splitAnimationEngineScenarios) {
+    it(scenario.name, () => scenario.run(keyframesDriver));
+  }
+});
+
+// ------------------------------------------------------------ keyframes engine only
 
 const frame = (patch: Partial<SplitAnimationFrame> = {}): SplitAnimationFrame => ({
   rect: { x: 0, y: 0, width: 100, height: 100 },
@@ -19,32 +166,6 @@ const frame = (patch: Partial<SplitAnimationFrame> = {}): SplitAnimationFrame =>
   ...patch,
 });
 
-interface FakeAnimation {
-  el: Element;
-  keyframes: Keyframe[];
-  options: KeyframeAnimationOptions;
-  cancel: ReturnType<typeof vi.fn>;
-}
-
-let animations: FakeAnimation[] = [];
-let resolveAll: () => void = () => undefined;
-const proto = HTMLElement.prototype as unknown as { animate?: unknown };
-const original = proto.animate;
-
-function mockAnimate() {
-  animations = [];
-  const finished = new Promise<void>((resolve) => (resolveAll = resolve));
-  proto.animate = function (
-    this: Element,
-    keyframes: Keyframe[],
-    options: KeyframeAnimationOptions,
-  ) {
-    const cancel = vi.fn();
-    animations.push({ el: this, keyframes, options, cancel });
-    return { finished, cancel } as unknown as Animation;
-  };
-}
-
 type ContextPatch = Partial<Omit<SplitAnimationContext<HTMLElement>, 'options'>> & {
   options?: Partial<SplitAnimationSettings>;
 };
@@ -52,7 +173,6 @@ type ContextPatch = Partial<Omit<SplitAnimationContext<HTMLElement>, 'options'>>
 function context({ options, ...patch }: ContextPatch = {}) {
   const shell = document.createElement('div');
   const host = document.createElement('div');
-  const abort = new AbortController();
   const ctx: SplitAnimationContext<HTMLElement> = {
     phase: 'show',
     container: {} as never,
@@ -60,7 +180,7 @@ function context({ options, ...patch }: ContextPatch = {}) {
     side: 'right',
     size: '300px',
     elements: { shell, host, backdrop: null, pushTarget: null },
-    from: frame({ rect: { x: 100, y: 0, width: 100, height: 100 } }),
+    from: frame(),
     to: frame(),
     properties: { host: null, push: null },
     options: {
@@ -72,213 +192,89 @@ function context({ options, ...patch }: ContextPatch = {}) {
       ...options,
     },
     reducedMotion: false,
-    signal: abort.signal,
+    signal: new AbortController().signal,
     started: vi.fn(),
     progress: () => undefined,
     ...patch,
   };
-  return { ctx, shell, host, abort };
+  return { ctx, shell, host };
 }
 
-afterEach(() => {
-  proto.animate = original;
-});
-
-describe('SplitKeyframesAnimationEngine', () => {
-  it('slides the shell in from its side and resolves when the animations finish', async () => {
-    mockAnimate();
-    const engine = new SplitKeyframesAnimationEngine();
-    const { ctx, shell } = context({
-      options: { preset: 'slide', duration: 50, respectReducedMotion: true },
-    });
-    const done = engine.animate(ctx);
-    expect(ctx.started).toHaveBeenCalled();
-    expect(animations[0].el).toBe(shell);
-    expect(animations[0].keyframes).toEqual([
-      { transform: 'translateX(100%)' },
-      { transform: 'none' },
-    ]);
-    expect(animations[0].options).toMatchObject({ duration: 50, fill: 'both' });
-    resolveAll();
-    await done;
-    engine.cleanup(ctx);
-    expect(animations[0].cancel).toHaveBeenCalledTimes(1);
+describe('KeyframesSplitAnimationEngine: keyframes only', () => {
+  it('addPreset chains, the presets option adds them too, and built-in names are reserved', () => {
+    const show = [{ opacity: 0 }, { opacity: 1 }];
+    const engine = new KeyframesSplitAnimationEngine({ presets: { a: { show } } });
+    expect(engine.addPreset('b', { show }).addPreset('c', { hide: show })).toBe(engine);
+    for (const name of ['a', 'b', 'c']) {
+      expect(() => engine.animate(context({ options: { preset: name } }).ctx)).not.toThrow();
+    }
+    for (const name of ['slide', 'fade', 'scale', 'collapse', 'none', '', ' ']) {
+      expect(() => engine.addPreset(name, { show }), name).toThrow(/presets/);
+    }
+    expect(() => engine.addPreset('x', null as never)).toThrow(/presets\.x/);
+    expect(() => engine.addPreset('x', { show: 'a' as never })).toThrow(/presets\.x\.show/);
+    expect(() => engine.addPreset('x', { backdrop: 3 as never })).toThrow(/backdrop/);
+    expect(() => engine.addPreset('x', { sizes: 'yes' as never })).toThrow(/sizes/);
   });
 
-  it('animates host size, push padding and backdrop; arrays reverse on hide', () => {
-    mockAnimate();
-    const engine = new SplitKeyframesAnimationEngine({
+  it('a preset with only show plays it backwards on hide, and the other way around', () => {
+    const keyframes = [{ opacity: 0 }, { opacity: 0.5 }, { opacity: 1 }];
+    const engine = new KeyframesSplitAnimationEngine()
+      .addPreset('in', { show: keyframes })
+      .addPreset('out', { hide: keyframes });
+    void engine.animate(context({ phase: 'hide', options: { preset: 'in' } }).ctx);
+    void engine.animate(context({ phase: 'show', options: { preset: 'out' } }).ctx);
+    expect(animations[0].keyframes).toEqual([...keyframes].reverse());
+    expect(animations[1].keyframes).toEqual([...keyframes].reverse());
+  });
+
+  it('keyframe functions of a preset receive the context', () => {
+    const show = vi.fn(() => [{ opacity: 0 }, { opacity: 1 }]);
+    const { ctx, shell } = context({ options: { preset: 'fn' } });
+    void new KeyframesSplitAnimationEngine().addPreset('fn', { show }).animate(ctx);
+    expect(show).toHaveBeenCalledWith(ctx);
+    expect(animations.map((a) => a.el)).toEqual([shell]);
+  });
+
+  it('host, push and backdrop of a preset play (backwards on hide) without sizes', () => {
+    const engine = new KeyframesSplitAnimationEngine().addPreset('own', {
+      show: [{ opacity: 0 }, { opacity: 1 }],
+      host: [{ width: '10px' }, { width: '20px' }],
+      push: [{ paddingRight: '1px' }, { paddingRight: '2px' }],
       backdrop: [{ opacity: 0.2 }, { opacity: 1 }],
     });
     const target = document.createElement('main');
     const backdrop = document.createElement('div');
-    const { ctx, host, shell } = context({
+    const { ctx, host } = context({
       phase: 'hide',
       layout: 'push',
-      options: { preset: 'collapse', respectReducedMotion: true },
+      options: { preset: 'own' },
       from: frame({ hostSize: '300px', push: '300px' }),
       to: frame({ hostSize: '0px', push: '0px' }),
       properties: { host: 'width', push: 'padding-right' },
     });
     void engine.animate({ ...ctx, elements: { ...ctx.elements, pushTarget: target, backdrop } });
-    expect(animations.map((a) => a.el)).toEqual([shell, host, target, backdrop]);
-    expect(animations[1].keyframes).toEqual([{ width: '300px' }, { width: '0px' }]);
-    expect(animations[2].keyframes).toEqual([{ paddingRight: '300px' }, { paddingRight: '0px' }]);
-    expect(animations[3].keyframes).toEqual([{ opacity: 1 }, { opacity: 0.2 }]);
+    const of = (el: Element) => animations.find((a) => a.el === el)!.keyframes;
+    expect(of(host)).toEqual([{ width: '20px' }, { width: '10px' }]);
+    expect(of(target)).toEqual([{ paddingRight: '2px' }, { paddingRight: '1px' }]);
+    expect(of(backdrop)).toEqual([{ opacity: 1 }, { opacity: 0.2 }]);
   });
 
-  it('decelerates on show and accelerates on hide, unless an easing is given', () => {
-    mockAnimate();
-    void new SplitKeyframesAnimationEngine().animate(context().ctx);
-    void new SplitKeyframesAnimationEngine().animate(context({ phase: 'hide' }).ctx);
-    void new SplitKeyframesAnimationEngine().animate(
-      context({
-        phase: 'hide',
-        options: { preset: 'slide', easing: 'linear', respectReducedMotion: true },
-      }).ctx,
-    );
-    expect(animations.map((a) => a.options.easing)).toEqual([
-      easingToCss(SPLIT_DEFAULT_EASING),
-      easingToCss(SPLIT_DEFAULT_HIDE_EASING),
-      'linear',
-    ]);
-  });
-
-  it('builds slide and scale keyframes from origin, distance and scale', () => {
-    mockAnimate();
-    const engine = new SplitKeyframesAnimationEngine();
-    void engine.animate(context({ options: { origin: 'left', distance: '2rem' } }).ctx);
-    void engine.animate(
-      context({ phase: 'hide', options: { preset: 'scale', scale: 1.2, origin: 'bottom' } }).ctx,
-    );
-    void engine.animate(
-      context({ options: { preset: 'scale', scale: 0.8, origin: 'center' } }).ctx,
-    );
-    expect(animations[0].keyframes).toEqual([
-      { transform: 'translateX(-2rem)' },
-      { transform: 'none' },
-    ]);
-    expect(animations[1].keyframes).toEqual([
-      { transform: 'none', transformOrigin: 'center bottom' },
-      { transform: 'scale(1.2)', transformOrigin: 'center bottom' },
-    ]);
-    expect(animations[2].keyframes).toEqual([
-      { transform: 'scale(0.8)', transformOrigin: 'center' },
-      { transform: 'none', transformOrigin: 'center' },
-    ]);
-  });
-
-  it('collapse reveals the shell like a curtain in every layout', () => {
-    mockAnimate();
-    const engine = new SplitKeyframesAnimationEngine();
-    const target = document.createElement('main');
-    const body = context({
-      phase: 'hide',
-      layout: 'push',
-      options: { preset: 'collapse' },
-      from: frame({ push: '300px' }),
-      to: frame({ push: '0px' }),
-      properties: { host: null, push: 'padding-right' },
-    });
-    void engine.animate({ ...body.ctx, elements: { ...body.ctx.elements, pushTarget: target } });
-    expect(animations.map((a) => a.el)).toEqual([body.shell, target]);
-    expect(animations[0].keyframes).toEqual([
-      { clipPath: 'inset(0px 0px 0px 0px)' },
-      { clipPath: 'inset(0px 0px 0px 100%)' },
-    ]);
-
-    mockAnimate();
-    const overlay = context({ options: { preset: 'collapse' } });
-    void engine.animate(overlay.ctx);
-    expect(animations.map((a) => a.el)).toEqual([overlay.shell]);
-    expect(animations[0].keyframes).toEqual([
-      { clipPath: 'inset(0px 0px 0px 100%)' },
-      { clipPath: 'inset(0px 0px 0px 0px)' },
-    ]);
-
-    mockAnimate();
-    const custom = context({
-      layout: 'push',
-      options: { preset: 'collapse' },
-      from: frame({ hostSize: '0px' }),
-      to: frame({ hostSize: '300px' }),
-      properties: { host: 'width', push: null },
-    });
-    void engine.animate(custom.ctx);
-    expect(animations.map((a) => a.el)).toEqual([custom.shell, custom.host]);
-    expect(animations[0].keyframes).toEqual([
-      { transform: 'translateX(-100%)' },
-      { transform: 'none' },
-    ]);
-  });
-
-  it('translates easing objects to CSS easings', () => {
-    mockAnimate();
-    void new SplitKeyframesAnimationEngine().animate(
-      context({ options: { easing: cubicBezier([0.3, 0, 0.2, 1]) } }).ctx,
-    );
-    void new SplitKeyframesAnimationEngine().animate(
-      context({ options: { easing: steps(5) } }).ctx,
-    );
-    expect(animations.map((a) => a.options.easing)).toEqual([
-      'cubic-bezier(0.3, 0, 0.2, 1)',
-      'steps(5, jump-end)',
-    ]);
-  });
-
-  it('with fade, animates only the shell, unless host/push keyframes are given', () => {
-    const push = {
-      layout: 'push' as const,
-      options: { preset: 'fade' as const, respectReducedMotion: true },
-      from: frame({ hostSize: '300px', push: '300px' }),
-      to: frame({ hostSize: '0px', push: '0px' }),
-      properties: { host: 'width' as const, push: 'padding-right' },
-    };
-    const target = document.createElement('main');
-
-    mockAnimate();
-    const plain = context({ phase: 'hide', ...push });
-    void new SplitKeyframesAnimationEngine().animate({
-      ...plain.ctx,
-      elements: { ...plain.ctx.elements, pushTarget: target },
-    });
-    expect(animations.map((a) => a.el)).toEqual([plain.shell]);
-
-    mockAnimate();
-    const custom = context({ phase: 'hide', ...push });
-    void new SplitKeyframesAnimationEngine({
-      push: [{ paddingRight: '300px' }, { paddingRight: '300px' }],
-    }).animate({ ...custom.ctx, elements: { ...custom.ctx.elements, pushTarget: target } });
-    expect(animations.map((a) => a.el)).toEqual([custom.shell, target]);
-  });
-
-  it('uses custom keyframes, fade and none; aborts cancel the animations', () => {
-    mockAnimate();
-    const show = vi.fn(() => [{ opacity: 0 }, { opacity: 1 }]);
-    const { ctx, abort } = context();
-    void new SplitKeyframesAnimationEngine({ show }).animate(ctx);
-    expect(show).toHaveBeenCalledWith(ctx);
-    abort.abort();
-    expect(animations[0].cancel).toHaveBeenCalled();
-
-    mockAnimate();
-    const fade = context({
-      phase: 'hide',
-      options: { preset: 'fade', respectReducedMotion: true },
-    });
-    void new SplitKeyframesAnimationEngine().animate(fade.ctx);
-    expect(animations[0].keyframes).toEqual([{ opacity: 1 }, { opacity: 0 }]);
-
-    mockAnimate();
-    const none = context({ options: { preset: 'none', respectReducedMotion: true } });
-    expect(new SplitKeyframesAnimationEngine().animate(none.ctx)).toBeUndefined();
-    expect(animations).toHaveLength(0);
+  it('holds the end state (fill: both) until cleanup cancels the animations', async () => {
+    const engine = new KeyframesSplitAnimationEngine();
+    const { ctx } = context();
+    const done = engine.animate(ctx);
+    expect(animations[0].options.fill).toBe('both');
+    animations[0].resolve();
+    await done;
+    engine.cleanup(ctx);
+    expect(animations[0].cancelled).toBe(true);
   });
 
   it('ends at once without element.animate', () => {
     proto.animate = undefined;
     const { ctx } = context();
-    expect(new SplitKeyframesAnimationEngine().animate(ctx)).toBeUndefined();
-    expect(ctx.started).not.toHaveBeenCalled();
+    expect(new KeyframesSplitAnimationEngine().animate(ctx)).toBeUndefined();
+    expect(ctx.started).toHaveBeenCalledTimes(1);
   });
 });

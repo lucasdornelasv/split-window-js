@@ -26,7 +26,7 @@ provideSplitWindows({
 { mode: { extends: 'drawer', side: 'left', hostClass: 'menu', onShown: (ctx) => {} } }
 
 // 4. classe que estende um modo pronto (criada com DI, pode usar inject())
-class CompactPushMode extends SplitPushMode {
+class CompactPushMode extends PushSplitContainerMode {
   override settings() { return { size: '240px', panelClass: 'compact' }; }
 }
 { mode: CompactPushMode }
@@ -44,13 +44,13 @@ A animação passa pela engine (`BaseSplitWindowEngine`, no core). Cada transiç
 Os motores ficam em pacotes próprios e são registrados por nome:
 
 ```ts
-import { SplitCssAnimationEngine } from '@split-window/css-animation';
-import { SplitKeyframesAnimationEngine } from '@split-window/keyframes-animation';
+import { CssSplitAnimationEngine } from '@split-window/css-animation';
+import { KeyframesSplitAnimationEngine } from '@split-window/keyframes-animation';
 
 provideSplitWindows({
   animationEngines: {
-    css: new SplitCssAnimationEngine(),
-    keyframes: () => new SplitKeyframesAnimationEngine(),
+    css: new CssSplitAnimationEngine(),
+    keyframes: () => new KeyframesSplitAnimationEngine(),
   },
   containerDefaults: { animation: true }, // global: anima todos com o primeiro motor (css)
 });
@@ -58,7 +58,7 @@ provideSplitWindows({
 { animation: true }                                // primeiro motor registrado
 { animation: { engine: 'keyframes', preset: 'fade', duration: 250 } } // por nome
 { animation: { engine: 'none' } }                  // noop
-{ animation: new SplitKeyframesAnimationEngine({ show: [...], hide: [...] }) } // instância
+{ animation: new KeyframesSplitAnimationEngine() } // instância
 { animation: MinhaEngine }                         // classe (criada num contexto de injeção)
 { animation: (ctx) => ctx.elements.shell.animate(...).finished } // função
 ```
@@ -116,7 +116,52 @@ animation: {
 - `origin`: no `slide`, o lado de onde o painel vem e para onde vai (padrão: o lado do container; `center` também vale o lado do container). No `scale`, a borda de onde ele cresce e para onde encolhe (padrão: `center`).
 - `distance` (`slide`): número em px ou comprimento CSS; porcentagem é do tamanho do painel. Padrão: `'100%'` (sai por inteiro).
 - `scale` (`scale`): menor que 1, o painel cresce até o tamanho final; maior que 1, ele encolhe até ele. Padrão: `0.9`.
-- Só `slide` e `collapse` animam os tamanhos do layout (o host custom em `push` e o padding da página no push do body). Com `fade` e `scale`, ao abrir a página já encolhe no início, e ao fechar ela só volta ao tamanho normal depois do fim da animação. Cada fase segue o seu preset: abrir com `fade` e fechar com `slide` anima o padding só no fechamento. Keyframes `host`/`push` passados ao `SplitKeyframesAnimationEngine` tocam com qualquer preset.
+- Só `slide` e `collapse` animam os tamanhos do layout (o host custom em `push` e o padding da página no push do body). Com `fade` e `scale`, ao abrir a página já encolhe no início, e ao fechar ela só volta ao tamanho normal depois do fim da animação. Cada fase segue o seu preset: abrir com `fade` e fechar com `slide` anima o padding só no fechamento.
+
+### Presets próprios (`addPreset`)
+
+Cada motor aceita presets com nome, escolhidos em `preset`, `show` e `hide` como os prontos, em qualquer camada. `addPreset(nome, preset)` devolve o próprio motor, para encadear, e os mesmos presets também podem ir no construtor (`{ presets: { pop: ... } }`). Os nomes dos prontos são reservados, e um nome que o motor não conhece gera um erro na transição, que termina sem animação.
+
+```ts
+provideSplitWindows({
+  animationEngines: {
+    css: new CssSplitAnimationEngine().addPreset('pop', {
+      variables: { '--pop-scale': '0.92' }, // no shell durante a transição (ou (ctx) => ({ ... }))
+      styles: `
+        [data-split-animation='pop']:is(.split-showing, .split-hiding) {
+          transition-property: opacity, transform;
+          transition-duration: var(--split-animation-duration);
+          transition-timing-function: var(--split-animation-easing);
+        }
+        [data-split-animation='pop'].split-hiding {
+          transition-timing-function: var(--split-animation-easing-hide);
+        }
+        [data-split-animation='pop']:is(.split-enter-from, .split-hiding) {
+          opacity: 0;
+          transform: scale(var(--pop-scale));
+        }`,
+    }),
+    keyframes: new KeyframesSplitAnimationEngine().addPreset('pop', {
+      show: [{ opacity: 0, transform: 'scale(0.92)' }, { opacity: 1, transform: 'none' }],
+      // sem hide: o show tocado ao contrário
+    }),
+  },
+});
+
+{ animation: { preset: 'pop', duration: 300 } }
+{ animation: { engine: 'keyframes', show: 'pop', hide: 'slide' } }
+```
+
+| Opção     | CSS                                                                       | Keyframes                                                                         |
+| --------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| visual    | `styles`: CSS injetado uma vez por documento, no primeiro uso             | `show`/`hide`: keyframes ou função do contexto (um vale pelo outro, ao contrário) |
+| variáveis | `variables`: variáveis CSS no shell, fixas ou função do contexto          | (nas funções de keyframes)                                                        |
+| backdrop  | `backdrop`: preset do backdrop (padrão `fade`)                            | `backdrop`: keyframes do backdrop (padrão: fade)                                  |
+| tamanhos  | `sizes: true`: anima o host em `push` e o padding da página, como `slide` | `sizes: true`, ou keyframes próprios em `host` e `push`                           |
+
+- Sem `sizes`, o preset próprio se comporta como `fade` e `scale` em relação ao layout: o espaço abre de uma vez no início da abertura e volta no fim do fechamento.
+- No CSS, o shell recebe `data-split-animation="<nome>"` e as classes de estado (`split-enter-from`, `split-showing`, `split-show`, `split-hiding`), e o motor espera o `transitionend` das regras do preset. Duração, easing e delay das opções chegam pelas variáveis `--split-animation-*`.
+- No keyframes, duração, easing e delay das opções valem para os keyframes do preset.
 
 ### Easing
 

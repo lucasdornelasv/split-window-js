@@ -15,8 +15,8 @@ import {
   SplitActiveWindow,
   SplitContainerRegistry,
   SplitInvalidOptionError,
-  SplitOverlayMode,
-  SplitPushMode,
+  OverlaySplitContainerMode,
+  PushSplitContainerMode,
   SplitWindowManager,
   provideSplitAnimationEngines,
   SplitAnimationEngineRegistry,
@@ -32,10 +32,10 @@ import {
 } from '../public-api';
 import { SplitAnimationEngine } from '@split-window/core';
 import {
-  SplitCssAnimationEngine,
+  CssSplitAnimationEngine,
   type SplitCssAnimationClasses,
 } from '@split-window/css-animation';
-import { SplitKeyframesAnimationEngine } from '@split-window/keyframes-animation';
+import { KeyframesSplitAnimationEngine } from '@split-window/keyframes-animation';
 import { AngularSplitEngine } from './engine/angular-split-engine';
 
 @Component({
@@ -52,14 +52,14 @@ class Tab implements OnDestroy {
 
 const MODE_CLASS = new InjectionToken<string>('MODE_CLASS');
 
-class TokenMode extends SplitPushMode {
+class TokenMode extends PushSplitContainerMode {
   private readonly cls = inject(MODE_CLASS);
   override settings() {
     return { panelClass: this.cls, size: '123px' };
   }
 }
 
-class MyCssEngine extends SplitCssAnimationEngine {
+class MyCssEngine extends CssSplitAnimationEngine {
   protected override classesFor(ctx: SplitAnimationContext): SplitCssAnimationClasses {
     return { ...super.classesFor(ctx), showing: 'my-showing' };
   }
@@ -328,7 +328,7 @@ describe('modes and animations', () => {
         mode: (ctx) =>
           ctx.key === 'fn'
             ? {
-                extends: new SplitOverlayMode(),
+                extends: new OverlaySplitContainerMode(),
                 onOpen: () => events.push('open'),
                 onShown: () => events.push('shown'),
                 onClose: () => events.push('close'),
@@ -471,7 +471,7 @@ describe('modes and animations', () => {
     });
 
     it('the CSS engine toggles the state classes and waits for transitionend', async () => {
-      setup({ animationEngines: { css: () => new SplitCssAnimationEngine() } });
+      setup({ animationEngines: { css: () => new CssSplitAnimationEngine() } });
       const host = hostEl();
       registry.registerContainer('a', host, {
         mode: {
@@ -500,7 +500,7 @@ describe('modes and animations', () => {
     });
 
     it('the CSS engine ends at once without a transition duration', () => {
-      setup({ animationEngines: { css: () => new SplitCssAnimationEngine() } });
+      setup({ animationEngines: { css: () => new CssSplitAnimationEngine() } });
       registry.registerContainer('a', hostEl(), {
         // The library styles give 200ms; a zero duration must end synchronously.
         mode: { onOpen: (ctx) => ctx.styles.set(ctx.elements.shell, 'transition-duration', '0s') },
@@ -523,7 +523,7 @@ describe('modes and animations', () => {
     });
 
     it('the keyframes engine animates the shell and the host size', async () => {
-      setup({ animationEngines: { keyframes: new SplitKeyframesAnimationEngine() } });
+      setup({ animationEngines: { keyframes: new KeyframesSplitAnimationEngine() } });
       const animations: { el: Element; keyframes: Keyframe[]; cancel: ReturnType<typeof vi.fn> }[] =
         [];
       let resolveAll!: () => void;

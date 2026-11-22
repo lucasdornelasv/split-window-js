@@ -52,10 +52,10 @@ export type {
 // Modes
 export {
   SplitContainerMode,
-  SplitInlineMode,
-  SplitPushMode,
-  SplitOverlayMode,
-  SplitDefinedMode,
+  InlineSplitContainerMode,
+  PushSplitContainerMode,
+  OverlaySplitContainerMode,
+  DefinedSplitContainerMode,
   offsetRect,
   axisOf,
 } from './lib/modes/container-mode';
@@ -83,7 +83,7 @@ export type {
 export {
   SplitAnimationEngine,
   NoopSplitAnimationEngine,
-  SplitFunctionAnimationEngine,
+  FunctionSplitAnimationEngine,
   SplitAnimationEngineRegistry,
   SPLIT_DEFAULT_EASING,
   SPLIT_DEFAULT_HIDE_EASING,

@@ -2,13 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   NoopSplitAnimationEngine,
   SplitAnimationEngine,
-  SplitFunctionAnimationEngine,
+  FunctionSplitAnimationEngine,
   defaultAnimationPreset,
   isAnimationEngine,
   isAnimationEngineClass,
   mergeAnimation,
   normalizeAnimation,
   collapseReveal,
+  isBuiltInAnimationPreset,
   presetAnimatesSizes,
   resolveAnimation,
   scaleTransformOrigin,
@@ -39,7 +40,7 @@ describe('animation engines', () => {
 
   it('a function engine calls the function', async () => {
     const fn = vi.fn(() => Promise.resolve());
-    await new SplitFunctionAnimationEngine(fn).animate(ctx);
+    await new FunctionSplitAnimationEngine(fn).animate(ctx);
     expect(fn).toHaveBeenCalledWith(ctx);
   });
 
@@ -203,12 +204,16 @@ describe('animation engines', () => {
       { show: 'fade', hide: { preset: 'slide', origin: 'bottom', distance: '2rem' } },
       { easing: spring(), scale: 1.2, duration: 0, delay: 10, enabled: true },
       { easing: 'ease-in' },
+      // presets added to the engine: any name
+      'zoom',
+      { preset: 'zoom', show: 'pop' },
     ];
     for (const value of ok) expect(() => validateAnimation('a', value)).not.toThrow();
     const bad: [unknown, string][] = [
-      ['zoom', 'a'],
+      [' ', 'a'],
       [3, 'a'],
-      [{ preset: 'zoom' }, 'a.preset'],
+      [{ preset: '' }, 'a.preset'],
+      [{ preset: 3 }, 'a.preset'],
       [{ duration: -1 }, 'a.duration'],
       [{ delay: 'x' }, 'a.delay'],
       [{ easing: '' }, 'a.easing'],
@@ -219,7 +224,7 @@ describe('animation engines', () => {
       [{ scale: 0 }, 'a.scale'],
       [{ enabled: 'yes' }, 'a.enabled'],
       [{ show: 3 }, 'a.show'],
-      [{ show: 'zoom' }, 'a.show.preset'],
+      [{ show: ' ' }, 'a.show.preset'],
       [{ hide: { scale: -1 } }, 'a.hide.scale'],
     ];
     for (const [value, option] of bad) {
@@ -227,6 +232,14 @@ describe('animation engines', () => {
         expect.objectContaining({ option }),
       );
     }
+  });
+
+  it('tells the built-in presets apart from the added ones', () => {
+    for (const preset of ['slide', 'fade', 'scale', 'collapse', 'none']) {
+      expect(isBuiltInAnimationPreset(preset)).toBe(true);
+    }
+    expect(isBuiltInAnimationPreset('pop')).toBe(false);
+    expect(presetAnimatesSizes('pop')).toBe(false);
   });
 
   it('picks the default preset from the layout', () => {

@@ -1,6 +1,6 @@
 {
   "name": "@split-window/core",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Framework-agnostic state and rules for tabbed split containers.",
   "license": "MIT",
   "type": "module",

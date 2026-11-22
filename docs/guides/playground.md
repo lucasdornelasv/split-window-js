@@ -13,7 +13,7 @@ Cada container pode ser ativado ou desativado, escolhido como padrão e editado 
 
 As opções de abertura valem para o próximo `open()`. A tela mostra o código equivalente, pronto para copiar, com só as opções diferentes do padrão da biblioteca. Os erros (`SplitInvalidOptionError`, `SplitContainerFullError`...) aparecem na própria página.
 
-As opções globais do `provideSplitWindows()` (`labels`, `bodySize`, `containerDefaults`, `animationEngines`, `modes`...) só valem na inicialização. Por isso o código mostra a configuração do app de demonstração, que registra os motores `css` e `keyframes` e o modo `drawer` usados nos campos.
+As opções globais do `provideSplitWindows()` (`labels`, `bodySize`, `containerDefaults`, `animationEngines`, `modes`...) só valem na inicialização. Por isso o código mostra a configuração do app de demonstração, que registra os motores `css` e `keyframes` (os dois com o preset próprio `pop`, de [pop-preset.ts](../../apps/demo-angular/src/app/shared/pop-preset.ts)) e o modo `drawer` usados nos campos.
 
 ## Exemplo
 
@@ -24,10 +24,17 @@ Com os valores iniciais (`esquerdo` e `body-right` ativos), o código gerado é:
 provideSplitWindows({
   bodyContainers: true,
   animationEngines: {
-    css: new SplitCssAnimationEngine(),
-    keyframes: new SplitKeyframesAnimationEngine(),
+    css: new CssSplitAnimationEngine().addPreset('pop', POP_CSS_PRESET),
+    keyframes: new KeyframesSplitAnimationEngine().addPreset('pop', POP_KEYFRAMES_PRESET),
   },
-  modes: { drawer: { extends: 'overlay', size: '300px', panelClass: 'demo-drawer' } },
+  modes: {
+    drawer: {
+      extends: 'overlay',
+      size: '300px',
+      panelClass: 'demo-drawer',
+      animation: { preset: 'slide', duration: 260 },
+    },
+  },
 });
 
 // body containers (sides not given are disabled)
@@ -125,6 +132,7 @@ registry.useBodyContainers({
 - O estado e as funções que geram as opções e o código ficam em [playground.model.ts](../../apps/demo-angular/src/app/pages/playground.model.ts): `containerOptions(key, config)`, `bodyConfig(state)`, `openOptions(state)` e `playgroundCode(state)`.
 - `mode: 'inline'` fica desabilitado nos containers do body, que não aceitam esse layout.
 - Desativar o container padrão faz o padrão voltar ao automático.
+- O campo `preset` traz os prontos e o `pop`, preset próprio registrado com `addPreset` nos dois motores do app.
 - Cada fase tem o seu bloco (`animation.show` e `animation.hide`). `origin` e `distance` aparecem para `slide` (e para o preset do layout); `scale` e `origin`, para `scale`. Pontos inválidos em `cubicBezier([...])` mostram o `SplitInvalidOptionError` de `animation.<fase>.easing`.
 - `expand.maxWidth` aceita só dígitos (vira número em px) ou texto em `px`, `vw`, `vh` ou `%`. Outro valor mostra o `SplitInvalidOptionError`, e o container fica sem registro até a correção.
 - Com `maxTabs` e `onReject: 'throw'`, abrir além do limite mostra o `SplitContainerFullError`. Com `'cancel'`, a tela avisa que a aba foi cancelada (`ref.rejected`).

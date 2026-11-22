@@ -1,9 +1,10 @@
 import { provideBrowserGlobalErrorListeners, type ApplicationConfig } from '@angular/core';
 import { provideRouter, withHashLocation } from '@angular/router';
 import { provideSplitWindows } from '@split-window/angular';
-import { SplitCssAnimationEngine } from '@split-window/css-animation';
-import { SplitKeyframesAnimationEngine } from '@split-window/keyframes-animation';
+import { CssSplitAnimationEngine } from '@split-window/css-animation';
+import { KeyframesSplitAnimationEngine } from '@split-window/keyframes-animation';
 import { routes } from './app.routes';
+import { POP_CSS_PRESET, POP_KEYFRAMES_PRESET } from './shared/pop-preset';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -13,9 +14,10 @@ export const appConfig: ApplicationConfig = {
       // Minimal configuration: only body-right, no tab limit, as the default container.
       bodyContainers: true,
       // Animation engines by name; an animated container without `engine` uses the first.
+      // Both get a preset of their own, "pop", picked like the built-in ones.
       animationEngines: {
-        css: new SplitCssAnimationEngine(),
-        keyframes: new SplitKeyframesAnimationEngine(),
+        css: new CssSplitAnimationEngine().addPreset('pop', POP_CSS_PRESET),
+        keyframes: new KeyframesSplitAnimationEngine().addPreset('pop', POP_KEYFRAMES_PRESET),
       },
       // A global mode, used by the "Modos e animação" page as mode: 'drawer'.
       modes: {

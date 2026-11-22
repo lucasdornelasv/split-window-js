@@ -16,10 +16,10 @@ import { SPLIT_CONTAINER_DEFAULTS, SPLIT_WINDOW_CONFIG, SPLIT_WINDOW_MODES } fro
 import type { SplitContainerDefaults } from '../types';
 import {
   SplitContainerMode,
-  SplitDefinedMode,
-  SplitInlineMode,
-  SplitOverlayMode,
-  SplitPushMode,
+  DefinedSplitContainerMode,
+  InlineSplitContainerMode,
+  OverlaySplitContainerMode,
+  PushSplitContainerMode,
   mergeModeSettings,
   pickModeSettings,
   type SplitModeDefinition,
@@ -70,9 +70,9 @@ export class SplitModeResolver {
   );
   private readonly instances = new Map<Type<unknown>, unknown>();
   private readonly builtins: Record<SplitContainerLayout, SplitContainerMode> = {
-    inline: new SplitInlineMode(),
-    push: new SplitPushMode(),
-    overlay: new SplitOverlayMode(),
+    inline: new InlineSplitContainerMode(),
+    push: new PushSplitContainerMode(),
+    overlay: new OverlaySplitContainerMode(),
   };
 
   /** Names that `mode` accepts. */
@@ -192,7 +192,7 @@ export class SplitModeResolver {
         definition.layout && definition.layout !== base.layout
           ? this.builtins[definition.layout]
           : base;
-      return new SplitDefinedMode(base, delegate, definition);
+      return new DefinedSplitContainerMode(base, delegate, definition);
     }
     throw new SplitInvalidOptionError('mode', input, 'nome de modo, objeto, classe ou função');
   }

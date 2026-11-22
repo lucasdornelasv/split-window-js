@@ -48,7 +48,7 @@ export interface SplitAnimationProperties {
 }
 
 /**
- * Looks the engines understand:
+ * Looks every engine understands:
  * - `slide`: moves in from `origin` (show) and out toward it (hide), by `distance`;
  * - `scale`: from `scale` to the natural size (show) and back (hide), anchored at `origin`;
  * - `fade`: opacity only;
@@ -60,15 +60,27 @@ export interface SplitAnimationProperties {
  * Only `slide` and `collapse` animate the sizes of the layout. With the others, they change
  * at once: at the start of a show and at the end of a hide.
  */
-export type SplitAnimationPreset = 'slide' | 'fade' | 'scale' | 'collapse' | 'none';
+export type SplitBuiltInAnimationPreset = 'slide' | 'fade' | 'scale' | 'collapse' | 'none';
 
-export const SPLIT_ANIMATION_PRESETS: readonly SplitAnimationPreset[] = [
+/**
+ * A built-in preset, or the name of a preset added to the engine (`addPreset`). An engine
+ * that does not know the name reports it on the transition, which then ends at once.
+ */
+export type SplitAnimationPreset = SplitBuiltInAnimationPreset | (string & {});
+
+/** The built-in presets. Their names are reserved: engines do not accept them in `addPreset`. */
+export const SPLIT_ANIMATION_PRESETS: readonly SplitBuiltInAnimationPreset[] = [
   'slide',
   'fade',
   'scale',
   'collapse',
   'none',
 ];
+
+/** Whether a preset is one of the built-in ones. */
+export function isBuiltInAnimationPreset(preset: string): preset is SplitBuiltInAnimationPreset {
+  return (SPLIT_ANIMATION_PRESETS as readonly string[]).includes(preset);
+}
 
 /** A side of the container, or `center` (`scale` only). */
 export type SplitAnimationOrigin = SplitBodySide | 'center';
@@ -189,7 +201,7 @@ export type SplitAnimationFn<TElement = unknown> = (
 ) => Promise<void> | void;
 
 /** Wraps a function as an engine. */
-export class SplitFunctionAnimationEngine<
+export class FunctionSplitAnimationEngine<
   TElement = unknown,
 > extends SplitAnimationEngine<TElement> {
   constructor(private readonly fn: SplitAnimationFn<TElement>) {
@@ -394,7 +406,10 @@ export function resolveAnimation<TElement>(
   return { show: phase(options.show), hide: phase(options.hide) };
 }
 
-/** Whether the preset animates the sizes of the layout (host in `push`, page padding). */
+/**
+ * Whether a built-in preset animates the sizes of the layout (host in `push`, page padding).
+ * Presets added to an engine say it in their own definition (`sizes`).
+ */
 export function presetAnimatesSizes(preset: SplitAnimationPreset): boolean {
   return preset === 'slide' || preset === 'collapse';
 }
@@ -500,9 +515,7 @@ export function validateAnimation(option: string, value: unknown): void {
   if (value === undefined || typeof value === 'boolean') return;
   if (typeof value === 'function' || isAnimationEngine(value)) return;
   if (typeof value === 'string') {
-    if (!SPLIT_ANIMATION_PRESETS.includes(value as SplitAnimationPreset)) {
-      throw new SplitInvalidOptionError(option, value, SPLIT_ANIMATION_PRESETS.join(' | '));
-    }
+    if (value.trim() === '') throw new SplitInvalidOptionError(option, value, PRESET_EXPECTED);
     return;
   }
   if (typeof value !== 'object' || value === null) {
@@ -527,13 +540,14 @@ export function validateAnimation(option: string, value: unknown): void {
 }
 
 const ORIGINS: readonly SplitAnimationOrigin[] = ['left', 'right', 'top', 'bottom', 'center'];
+const PRESET_EXPECTED = `${SPLIT_ANIMATION_PRESETS.join(' | ')} ou o nome de um preset do motor`;
 
 function validatePhase(option: string, p: SplitAnimationPhaseOptions): void {
   const fail = (key: string, value: unknown, expected: string): never => {
     throw new SplitInvalidOptionError(`${option}.${key}`, value, expected);
   };
-  if (p.preset !== undefined && !SPLIT_ANIMATION_PRESETS.includes(p.preset)) {
-    fail('preset', p.preset, SPLIT_ANIMATION_PRESETS.join(' | '));
+  if (p.preset !== undefined && (typeof p.preset !== 'string' || p.preset.trim() === '')) {
+    fail('preset', p.preset, PRESET_EXPECTED);
   }
   for (const key of ['duration', 'delay'] as const) {
     const v = p[key];
@@ -658,7 +672,7 @@ export class SplitAnimationEngineRegistry<TElement = unknown> {
     if (typeof input === 'function') {
       let wrapped = this.instances.get(input);
       if (!wrapped) {
-        wrapped = new SplitFunctionAnimationEngine(input as SplitAnimationFn<TElement>);
+        wrapped = new FunctionSplitAnimationEngine(input as SplitAnimationFn<TElement>);
         this.instances.set(input, wrapped);
       }
       return wrapped;

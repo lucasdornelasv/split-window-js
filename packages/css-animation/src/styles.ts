@@ -1,7 +1,7 @@
 import { SPLIT_DEFAULT_EASING, SPLIT_DEFAULT_HIDE_EASING, easingToCss } from '@split-window/core';
 
 /**
- * Styles of the presets, injected once per document by `SplitCssAnimationEngine` (as the
+ * Styles of the presets, injected once per document by `CssSplitAnimationEngine` (as the
  * first stylesheet of `<head>`, so the app CSS wins). Every value is a custom property.
  *
  * During a transition the engine sets on the shell `data-split-animation="<preset>"` (the

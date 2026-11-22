@@ -72,6 +72,16 @@ Motores prontos: `@split-window/css-animation` (classes de estado e `transitione
 
 Opções por fase: `animation.show` e `animation.hide` sobrescrevem as opções do topo (`preset`, `duration`, `easing`, `delay`, `origin`, `distance`, `scale`). `resolveAnimation(input, { layout, kind, side })` devolve as opções resolvidas das duas fases (o adaptador passa a da fase em `ctx.options`), `mergeAnimation` junta camadas e `validateAnimation` valida. Presets: `slide`, `fade`, `scale`, `collapse`, `none`; `slideTransform`, `scaleTransformOrigin`, `collapseReveal` e `presetAnimatesSizes` ajudam os motores.
 
+Contrato dos motores, em `@split-window/core/testing`: `splitAnimationEngineScenarios` é a lista de cenários que todo motor precisa atender do mesmo jeito (presets em cada layout, `origin`/`distance`/`scale`, timing e tradução de easing, `started()`, fim, abort, duração 0 e limpeza). O motor entra com um `SplitAnimationEngineDriver`, que traduz o que ele faz para trilhas comuns (propriedade de cada elemento, de/para) e timing. Os motores CSS e keyframes rodam esse contrato, e um motor próprio pode rodar também:
+
+```ts
+import { splitAnimationEngineScenarios } from '@split-window/core/testing';
+
+for (const scenario of splitAnimationEngineScenarios) {
+  it(scenario.name, () => scenario.run(meuDriver));
+}
+```
+
 Easing como descrição: `cubicBezier([...])`, `linear([...])`, `steps(n)`, `spring({...})`, `customEasing(fn)` e `SPLIT_EASINGS`. Cada motor traduz: `easingToCss(easing)` para CSS e Web Animations (molas e funções viram um `linear()` amostrado) e `toEasingFunction(easing)` para motores que calculam os quadros. Tipos próprios (`{ type: 'meu', ... }`) passam na validação e são traduzidos pelo motor que os conhece.
 
 ## Utilitários

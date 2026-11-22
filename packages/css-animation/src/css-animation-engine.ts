@@ -1,7 +1,10 @@
 import {
+  SPLIT_ANIMATION_PRESETS,
   SplitAnimationEngine,
+  SplitInvalidOptionError,
   SplitStyleStash,
   collapseReveal,
+  isBuiltInAnimationPreset,
   defaultEasing,
   easingToCss,
   presetAnimatesSizes,
@@ -10,6 +13,7 @@ import {
   slideTransform,
   transitionTimeMs,
   type SplitAnimationContext,
+  type SplitAnimationPreset,
   type SplitEasingInput,
 } from '@split-window/core';
 import { SPLIT_CSS_ANIMATION_STYLES, SPLIT_CSS_ANIMATION_STYLE_ID } from './styles.js';
@@ -33,11 +37,47 @@ export const SPLIT_CSS_ANIMATION_CLASSES: Readonly<SplitCssAnimationClasses> = O
   hiding: 'split-hiding',
 });
 
-export interface SplitCssAnimationEngineOptions {
+/**
+ * A preset added to the engine (`addPreset`), picked by name in `animation.preset`,
+ * `animation.show` or `animation.hide`, like the built-in ones. During a transition the
+ * shell gets `data-split-animation="<name>"` and the state classes, so the look is CSS:
+ *
+ * ```css
+ * [data-split-animation='pop']:is(.split-showing, .split-hiding) {
+ *   transition: opacity var(--split-animation-duration) var(--split-animation-easing),
+ *     transform var(--split-animation-duration) var(--split-animation-easing);
+ * }
+ * [data-split-animation='pop'].split-hiding {
+ *   transition-timing-function: var(--split-animation-easing-hide);
+ * }
+ * [data-split-animation='pop']:is(.split-enter-from, .split-hiding) {
+ *   opacity: 0;
+ *   transform: scale(var(--pop-scale));
+ * }
+ * ```
+ */
+export interface CssSplitAnimationPreset {
+  /** CSS of the preset, injected once per document when it is first used. */
+  styles?: string;
+  /** CSS variables set on the shell during the transition, fixed or from the context. */
+  variables?:
+    Record<string, string> | ((ctx: SplitAnimationContext<HTMLElement>) => Record<string, string>);
+  /** Preset of the backdrop (a built-in one or another added preset). Default: `fade`. */
+  backdrop?: SplitAnimationPreset;
+  /**
+   * Animates the host size and the page padding with inline transitions, like `slide`.
+   * Default: `false`: they change at once, at the start of a show and at the end of a hide.
+   */
+  sizes?: boolean;
+}
+
+export interface CssSplitAnimationEngineOptions {
   /** State classes. Custom names need your own CSS. */
   classes?: Partial<SplitCssAnimationClasses>;
-  /** Injects the preset styles once per document. Default: `true`. */
+  /** Injects the styles of the built-in presets once per document. Default: `true`. */
   injectStyles?: boolean;
+  /** Presets of this engine, by name. Same as calling `addPreset` for each one. */
+  presets?: Record<string, CssSplitAnimationPreset>;
 }
 
 /** A property animated with an inline transition (host size, push padding). */
@@ -54,28 +94,69 @@ export interface SplitCssFlipTarget {
  * durations) and ends at once when there is no transition.
  *
  * The look comes from CSS: the built-in presets (`slide`, `fade`, `scale`, `collapse`) are
- * injected once per document; any other look is a class of your own (`panelClass`) with
- * rules for the state classes. Each phase sets its own preset, so a fade in and a slide out
- * work. Sizes that change with the layout (host width, push padding) are animated with
- * inline transitions between the frames.
+ * injected once per document, and presets added with `addPreset` bring their own CSS. Each
+ * phase sets its own preset, so a fade in and a slide out work. Sizes that change with the
+ * layout (host width, push padding) are animated with inline transitions between the frames.
  *
  * Extend it and override `classesFor`, `prepare`, `flipTargets`, `waitFor`, `finish`,
- * `duration`, `easing` or `translateEasing`.
+ * `duration`, `easing`, `translateEasing` or `animatesSizes`.
  */
-export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
+export class CssSplitAnimationEngine extends SplitAnimationEngine<HTMLElement> {
   private readonly stashes = new WeakMap<SplitAnimationContext<HTMLElement>, SplitStyleStash>();
   protected readonly classes: SplitCssAnimationClasses;
   protected readonly injectStyles: boolean;
+  /** Presets added to this engine, by name. */
+  protected readonly presets = new Map<string, CssSplitAnimationPreset>();
 
-  constructor(options: SplitCssAnimationEngineOptions = {}) {
+  constructor(options: CssSplitAnimationEngineOptions = {}) {
     super();
     this.classes = { ...SPLIT_CSS_ANIMATION_CLASSES, ...options.classes };
     this.injectStyles = options.injectStyles ?? true;
+    for (const [name, preset] of Object.entries(options.presets ?? {})) {
+      this.addPreset(name, preset);
+    }
+  }
+
+  /**
+   * Adds (or replaces) a preset, picked by its name in the animation options. The names
+   * of the built-in presets are reserved.
+   * @returns this engine, to chain calls.
+   * @throws SplitInvalidOptionError for an invalid name or preset.
+   */
+  addPreset(name: string, preset: CssSplitAnimationPreset): this {
+    checkPresetName(name);
+    const fail = (key: string, value: unknown, expected: string): never => {
+      throw new SplitInvalidOptionError(`presets.${name}${key}`, value, expected);
+    };
+    if (typeof preset !== 'object' || preset === null) fail('', preset, 'objeto de preset');
+    const { styles, variables, backdrop, sizes } = preset;
+    if (styles !== undefined && typeof styles !== 'string') fail('.styles', styles, 'texto CSS');
+    if (
+      variables !== undefined &&
+      typeof variables !== 'function' &&
+      (typeof variables !== 'object' || variables === null)
+    ) {
+      fail('.variables', variables, 'objeto ou função');
+    }
+    if (backdrop !== undefined && (typeof backdrop !== 'string' || backdrop.trim() === '')) {
+      fail('.backdrop', backdrop, 'nome de preset');
+    }
+    if (sizes !== undefined && typeof sizes !== 'boolean') fail('.sizes', sizes, 'boolean');
+    this.presets.set(name, preset);
+    return this;
   }
 
   animate(ctx: SplitAnimationContext<HTMLElement>): Promise<void> | void {
-    const { shell } = ctx.elements;
-    if (this.injectStyles) injectStyles(shell.ownerDocument);
+    const { shell, backdrop } = ctx.elements;
+    const doc = shell.ownerDocument;
+    if (this.injectStyles) injectStyles(doc);
+    const preset = this.presetOf(ctx.options.preset);
+    if (preset?.styles) injectPresetStyles(doc, ctx.options.preset, preset.styles);
+    if (backdrop && ctx.options.preset !== 'none') {
+      const name = this.backdropPreset(ctx);
+      const own = this.presetOf(name);
+      if (own?.styles) injectPresetStyles(doc, name, own.styles);
+    }
     const stash = new SplitStyleStash();
     this.stashes.set(ctx, stash);
     const classes = this.classesFor(ctx);
@@ -140,11 +221,15 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
     const { from, to, options, phase } = ctx;
     stash.setAttribute(shell, 'data-split-animation', options.preset);
     if (backdrop && options.preset !== 'none') {
-      stash.setAttribute(backdrop, 'data-split-animation', 'fade');
+      stash.setAttribute(backdrop, 'data-split-animation', this.backdropPreset(ctx));
     }
     stash.set(shell, '--split-slide', slideTransform(options.origin, options.distance));
     stash.set(shell, '--split-scale', `${options.scale}`);
     stash.set(shell, '--split-transform-origin', scaleTransformOrigin(options.origin));
+    const preset = this.presets.get(options.preset);
+    const variables =
+      typeof preset?.variables === 'function' ? preset.variables(ctx) : preset?.variables;
+    for (const [name, value] of Object.entries(variables ?? {})) stash.set(shell, name, value);
     if (options.duration !== undefined) {
       stash.set(shell, '--split-animation-duration', `${options.duration}ms`);
       if (backdrop) stash.set(backdrop, '--split-animation-duration', `${options.duration}ms`);
@@ -168,11 +253,33 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
 
   /**
    * Whether the sizes that change with the layout (host size, push padding) are animated:
-   * with `slide` and `collapse`. With the others they change at once: the open layout is
-   * applied at the start of a show and removed only after a hide.
+   * with `slide` and `collapse`, and with an added preset that sets `sizes`. Otherwise they
+   * change at once: the open layout is applied at the start of a show and removed only
+   * after a hide.
    */
   protected animatesSizes(ctx: SplitAnimationContext<HTMLElement>): boolean {
-    return presetAnimatesSizes(ctx.options.preset);
+    const preset = this.presets.get(ctx.options.preset);
+    return preset ? preset.sizes === true : presetAnimatesSizes(ctx.options.preset);
+  }
+
+  /**
+   * The added preset of a name, or `null` for a built-in one.
+   * @throws SplitInvalidOptionError for a preset this engine does not know.
+   */
+  protected presetOf(name: SplitAnimationPreset): CssSplitAnimationPreset | null {
+    const preset = this.presets.get(name);
+    if (preset) return preset;
+    if (isBuiltInAnimationPreset(name)) return null;
+    throw new SplitInvalidOptionError(
+      'animation.preset',
+      name,
+      [...SPLIT_ANIMATION_PRESETS, ...this.presets.keys()].join(' | '),
+    );
+  }
+
+  /** Preset of the backdrop: `fade`, or the one the added preset of the phase names. */
+  protected backdropPreset(ctx: SplitAnimationContext<HTMLElement>): SplitAnimationPreset {
+    return this.presets.get(ctx.options.preset)?.backdrop ?? 'fade';
   }
 
   /**
@@ -297,11 +404,50 @@ function cssVar(el: HTMLElement, name: string): string {
   return view ? view.getComputedStyle(el).getPropertyValue(name).trim() : '';
 }
 
-/** Adds the preset styles to a document, once. */
+/** Adds the styles of the built-in presets to a document, once. */
 export function injectStyles(doc: Document): void {
   if (doc.getElementById(SPLIT_CSS_ANIMATION_STYLE_ID)) return;
   const style = doc.createElement('style');
   style.id = SPLIT_CSS_ANIMATION_STYLE_ID;
   style.textContent = SPLIT_CSS_ANIMATION_STYLES;
   doc.head.prepend(style);
+}
+
+/** Attribute that marks the `<style>` of an added preset with the preset name. */
+export const SPLIT_CSS_PRESET_STYLE_ATTRIBUTE = 'data-split-css-preset';
+
+/**
+ * Adds the styles of an added preset to a document, once (updated when they change). They
+ * go right after the other styles of the engine, at the start of `<head>`, so the app CSS
+ * wins.
+ */
+export function injectPresetStyles(doc: Document, name: string, css: string): void {
+  const engineStyles = [...doc.head.querySelectorAll<HTMLStyleElement>('style')].filter(
+    (s) =>
+      s.id === SPLIT_CSS_ANIMATION_STYLE_ID || s.hasAttribute(SPLIT_CSS_PRESET_STYLE_ATTRIBUTE),
+  );
+  const existing = engineStyles.find(
+    (s) => s.getAttribute(SPLIT_CSS_PRESET_STYLE_ATTRIBUTE) === name,
+  );
+  if (existing) {
+    if (existing.textContent !== css) existing.textContent = css;
+    return;
+  }
+  const style = doc.createElement('style');
+  style.setAttribute(SPLIT_CSS_PRESET_STYLE_ATTRIBUTE, name);
+  style.textContent = css;
+  const last = engineStyles[engineStyles.length - 1];
+  if (last) last.after(style);
+  else doc.head.prepend(style);
+}
+
+/** A preset name: not empty and not one of the built-in presets. */
+function checkPresetName(name: string): void {
+  if (typeof name !== 'string' || name.trim() === '' || isBuiltInAnimationPreset(name)) {
+    throw new SplitInvalidOptionError(
+      'presets',
+      name,
+      `nome não vazio, diferente dos presets prontos (${SPLIT_ANIMATION_PRESETS.join(', ')})`,
+    );
+  }
 }

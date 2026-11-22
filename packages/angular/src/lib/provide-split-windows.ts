@@ -33,7 +33,7 @@ import type { SplitWindowAngularConfig } from './types';
  *   provideSplitWindows({
  *     labels: { defaultTitle: 'New tab' }, // or () => inject(MyTranslations).splitLabels
  *     bodyContainers: true, // body-right enabled, as the default
- *     animationEngines: { css: new SplitCssAnimationEngine() },
+ *     animationEngines: { css: new CssSplitAnimationEngine() },
  *     modes: { drawer: { extends: 'overlay', panelClass: 'drawer', animation: 'slide' } },
  *     containerDefaults: { animation: true },
  *   }),
@@ -99,8 +99,10 @@ export function provideSplitModes(modes: Record<string, SplitModeInput>): Enviro
  *
  * ```ts
  * provideSplitAnimationEngines({
- *   css: () => new SplitCssAnimationEngine({ injectStyles: inject(MY_FLAG) }),
- *   pop: new SplitKeyframesAnimationEngine({ show: [{ transform: 'scale(.9)' }, { transform: 'none' }] }),
+ *   css: () => new CssSplitAnimationEngine({ injectStyles: inject(MY_FLAG) }),
+ *   pop: new KeyframesSplitAnimationEngine().addPreset('pop', {
+ *     show: [{ transform: 'scale(.9)' }, { transform: 'none' }],
+ *   }),
  * })
  * ```
  */

@@ -66,7 +66,7 @@ export interface SplitModeResolveContext {
  * container (`settings`). Extend a built-in mode to change a part of it:
  *
  * ```ts
- * class DrawerMode extends SplitOverlayMode {
+ * class DrawerMode extends OverlaySplitContainerMode {
  *   override settings() { return { panelClass: 'drawer', animation: { duration: 300 } }; }
  * }
  * ```
@@ -149,7 +149,7 @@ export function axisOf(side: SplitBodySide): 'width' | 'height' {
 }
 
 /** The panel fills its host (custom containers only). */
-export class SplitInlineMode extends SplitContainerMode {
+export class InlineSplitContainerMode extends SplitContainerMode {
   readonly layout = 'inline' as const;
 }
 
@@ -158,7 +158,7 @@ export class SplitInlineMode extends SplitContainerMode {
  * containers: the host becomes an anchor without size on the side axis and the panel is
  * placed against its `side` edge, over the neighbors.
  */
-export class SplitOverlayMode extends SplitContainerMode {
+export class OverlaySplitContainerMode extends SplitContainerMode {
   readonly layout = 'overlay' as const;
 }
 
@@ -168,7 +168,7 @@ export class SplitOverlayMode extends SplitContainerMode {
  * `--split-body-offset-<side>` on `<html>`. Custom containers: the host grows from 0 to the
  * size (or its natural size) on the side axis.
  */
-export class SplitPushMode extends SplitContainerMode {
+export class PushSplitContainerMode extends SplitContainerMode {
   readonly layout = 'push' as const;
 
   override open(ctx: SplitModeContext): void {
@@ -271,7 +271,7 @@ export type SplitModeInput =
   | SplitModeFn;
 
 /** Mode built from a `SplitModeDefinition` over a base mode. */
-export class SplitDefinedMode extends SplitContainerMode {
+export class DefinedSplitContainerMode extends SplitContainerMode {
   constructor(
     /** Mode whose settings are inherited. */
     readonly base: SplitContainerMode,

@@ -258,6 +258,50 @@ test.describe('Modos e animação', () => {
     });
   }
 
+  for (const engine of ['css', 'keyframes']) {
+    test(`a preset added with addPreset plays like the built-in ones (${engine})`, async ({
+      page,
+    }) => {
+      await gotoPage(page, 'playground');
+      await page.locator('[data-edit="body-right"]').click();
+      await page.locator('[data-field="animation"]').check();
+      await page.locator('[data-field="engine"]').selectOption(engine);
+      await page.locator('[data-field="show-preset"]').selectOption('pop');
+      // Linear, so the opacity spends the whole show between 0 and 1.
+      await page.locator('[data-field="show-duration"]').fill('1200');
+      await page.locator('[data-field="show-easing"]').selectOption('linear');
+      await expect(page.locator('demo-example[data-example="playground"] pre code')).toContainText(
+        "preset: 'pop'",
+      );
+      // On every frame of the show: the opacity of the panel.
+      await page.evaluate(() => {
+        const w = window as unknown as { opacities: number[] };
+        w.opacities = [];
+        const tick = () => {
+          const shell = document.querySelector<HTMLElement>(
+            'split-container[data-container-key="body-right"]',
+          );
+          if (shell?.classList.contains('split-animating')) {
+            w.opacities.push(Number(getComputedStyle(shell).opacity));
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+      const shell = container(page, 'body-right');
+      await page.locator('[data-action="open"]').click();
+      await expect(tabLabels(page, 'body-right')).toHaveText(['Nova aba']);
+      await expect(shell).not.toHaveClass(/split-animating/);
+      const opacities = await page.evaluate(
+        () => (window as unknown as { opacities: number[] }).opacities,
+      );
+      expect(opacities.filter((o) => o > 0.05 && o < 0.95).length).toBeGreaterThan(3);
+      if (engine === 'css') {
+        await expect(page.locator('style[data-split-css-preset="pop"]')).toHaveCount(1);
+      }
+    });
+  }
+
   test('each phase plays its own preset: fade in, scale out', async ({ page }) => {
     await gotoPage(page, 'playground');
     await page.locator('[data-edit="body-right"]').click();

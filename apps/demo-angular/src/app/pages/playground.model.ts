@@ -29,7 +29,8 @@ export const ON_FULL: SplitOverflowStrategy[] = [
 export const ON_REJECT: SplitRejectStrategy[] = ['throw', 'redirect-default', 'cancel'];
 export const MODES = ['', 'inline', 'push', 'overlay', 'drawer'] as const;
 export const ENGINES = ['', 'css', 'keyframes', 'none'] as const;
-export const PRESETS = ['', 'slide', 'fade', 'scale', 'collapse', 'none'] as const;
+/** Built-in presets, and `pop`, added to both engines of the demo (app.config.ts). */
+export const PRESETS = ['', 'slide', 'fade', 'scale', 'collapse', 'none', 'pop'] as const;
 export const SIDES: SplitBodySide[] = ['left', 'right', 'top', 'bottom'];
 export const PHASES = ['show', 'hide'] as const;
 export const ORIGINS = ['', 'left', 'right', 'top', 'bottom', 'center'] as const;
@@ -347,10 +348,17 @@ export function playgroundCode(s: PlaygroundState): string {
     'provideSplitWindows({',
     '  bodyContainers: true,',
     '  animationEngines: {',
-    '    css: new SplitCssAnimationEngine(),',
-    '    keyframes: new SplitKeyframesAnimationEngine(),',
+    "    css: new CssSplitAnimationEngine().addPreset('pop', POP_CSS_PRESET),",
+    "    keyframes: new KeyframesSplitAnimationEngine().addPreset('pop', POP_KEYFRAMES_PRESET),",
     '  },',
-    "  modes: { drawer: { extends: 'overlay', size: '300px', panelClass: 'demo-drawer' } },",
+    '  modes: {',
+    '    drawer: {',
+    "      extends: 'overlay',",
+    "      size: '300px',",
+    "      panelClass: 'demo-drawer',",
+    "      animation: { preset: 'slide', duration: 260 },",
+    '    },',
+    '  },',
     '});',
     '',
     '// body containers (sides not given are disabled)',

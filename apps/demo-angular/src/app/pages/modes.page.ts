@@ -2,26 +2,25 @@ import { ChangeDetectionStrategy, Component, inject, signal, type OnDestroy } fr
 import {
   SplitContainerDirective,
   SplitContainerRegistry,
-  SplitPushMode,
+  PushSplitContainerMode,
   SplitWindowManager,
   type SplitAnimationContext,
   type SplitContainerOptions,
   type SplitModeSettings,
 } from '@split-window/angular';
-import { SplitCssAnimationEngine } from '@split-window/css-animation';
-import { SplitKeyframesAnimationEngine } from '@split-window/keyframes-animation';
+import { CssSplitAnimationEngine } from '@split-window/css-animation';
 import { DemoExampleComponent } from '../shared/demo-example.component';
 import { NoteTabComponent } from '../shared/tabs';
 
 /** A mode by class: extends the built-in push and adds its own settings. */
-export class CompactPushMode extends SplitPushMode {
+export class CompactPushMode extends PushSplitContainerMode {
   override settings(): SplitModeSettings {
     return { size: '240px', panelClass: 'demo-compact', animation: { preset: 'collapse' } };
   }
 }
 
 /** An engine by class: the CSS engine with a slower duration. */
-export class SlowCssEngine extends SplitCssAnimationEngine {
+export class SlowCssEngine extends CssSplitAnimationEngine {
   protected override duration(): string {
     return '700ms';
   }
@@ -61,22 +60,32 @@ registry.useBodyContainers({ right: { mode: 'push', size: '360px', animation: tr
 const ENGINES_CODE = `// engines registered globally, by name; the first one is the default
 provideSplitWindows({
   animationEngines: {
-    css: new SplitCssAnimationEngine(),
-    keyframes: () => new SplitKeyframesAnimationEngine(),
+    css: new CssSplitAnimationEngine(),
+    keyframes: () => new KeyframesSplitAnimationEngine(),
   },
 });
 { animation: true }                       // css (the first registered)
 { animation: { engine: 'keyframes' } }    // by name
 { animation: { engine: 'none' } }         // noop: events only, nothing moves
 
-// an engine instance from @split-window/keyframes-animation, with its own keyframes
-{ mode: 'overlay', animation: { duration: 300, engine: new SplitKeyframesAnimationEngine({
-  show: [{ opacity: 0, transform: 'scale(.92)' }, { opacity: 1, transform: 'none' }],
-  hide: [{ opacity: 1 }, { opacity: 0, transform: 'scale(.92)' }],
-}) } }
+// presets of your own, added to each engine with addPreset (it returns the engine)
+provideSplitWindows({
+  animationEngines: {
+    css: new CssSplitAnimationEngine().addPreset('pop', {
+      variables: { '--pop-scale': '0.92' },
+      styles: \`[data-split-animation='pop']:is(.split-enter-from, .split-hiding) {
+        opacity: 0; transform: scale(var(--pop-scale)); } ...\`,
+    }),
+    keyframes: new KeyframesSplitAnimationEngine().addPreset('pop', {
+      show: [{ opacity: 0, transform: 'scale(0.92)' }, { opacity: 1, transform: 'none' }],
+    }),
+  },
+});
+{ mode: 'overlay', animation: { engine: 'css', preset: 'pop', duration: 300 } }
+{ mode: 'overlay', animation: { engine: 'keyframes', duration: 300, show: 'pop', hide: 'slide' } }
 
 // an engine by class, extending the CSS engine
-class SlowCssEngine extends SplitCssAnimationEngine {
+class SlowCssEngine extends CssSplitAnimationEngine {
   protected override duration() { return '700ms'; }
 }
 { mode: 'overlay', animation: { engine: SlowCssEngine } }
@@ -100,7 +109,7 @@ provideSplitWindows({
 { mode: 'drawer', closeWhenEmpty: true }
 
 // by class (created with DI, can inject())
-class CompactPushMode extends SplitPushMode {
+class CompactPushMode extends PushSplitContainerMode {
   override settings() {
     return { size: '240px', panelClass: 'demo-compact', animation: { preset: 'collapse' } };
   }
@@ -257,22 +266,26 @@ export default class ModesPage implements OnDestroy {
     label: 'Overlay',
   };
 
-  readonly engineKeys = ['motor-keyframes', 'motor-nome', 'motor-classe', 'motor-funcao'] as const;
+  readonly engineKeys = [
+    'preset-css',
+    'preset-keyframes',
+    'motor-nome',
+    'motor-classe',
+    'motor-funcao',
+  ] as const;
   readonly engines: Record<string, SplitContainerOptions> = {
-    'motor-keyframes': {
+    // The "pop" preset added to both engines in app.config.ts.
+    'preset-css': {
       mode: 'overlay',
       size: '300px',
       closeWhenEmpty: true,
-      animation: {
-        duration: 300,
-        engine: new SplitKeyframesAnimationEngine({
-          show: [
-            { opacity: 0, transform: 'scale(0.92)' },
-            { opacity: 1, transform: 'none' },
-          ],
-          hide: [{ opacity: 1 }, { opacity: 0, transform: 'scale(0.92)' }],
-        }),
-      },
+      animation: { engine: 'css', preset: 'pop', duration: 300 },
+    },
+    'preset-keyframes': {
+      mode: 'overlay',
+      size: '300px',
+      closeWhenEmpty: true,
+      animation: { engine: 'keyframes', duration: 300, show: 'pop', hide: 'slide' },
     },
     'motor-nome': {
       mode: 'overlay',
