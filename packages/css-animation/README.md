@@ -9,8 +9,8 @@ provideSplitWindows({ animationEngines: { css: new SplitCssAnimationEngine() } }
 // ou, numa instância: new SplitCssAnimationEngine({ classes: { show: 'aberto' }, injectStyles: false })
 ```
 
-- Presets `slide`, `fade` e `collapse`, injetados uma vez por documento como a primeira folha de estilo do `<head>`.
-- Variáveis: `--split-animation-duration`, `--split-animation-easing`, `--split-animation-delay`; durante a transição, `--split-slide` e `--split-from-*`/`--split-to-*` no shell.
+- Presets `slide`, `fade` e `collapse`, injetados uma vez por documento como a primeira folha de estilo do `<head>`. Com `fade`, os tamanhos do layout (host em `push`, padding da página) não são animados: mudam no início da abertura e no fim do fechamento (`animatesSizes(ctx)`, sobrescrevível).
+- Variáveis: `--split-animation-duration`, `--split-animation-easing` (abertura, desacelera), `--split-animation-easing-hide` (fechamento, acelera), `--split-animation-delay`; a opção `easing` define as duas curvas; durante a transição, `--split-slide` e `--split-from-*`/`--split-to-*` no shell.
 - Tamanho do host (`push` custom) e padding do `pushTarget` (`push` no body) animados com transições inline entre os frames.
 - Estenda a classe e sobrescreva `classesFor`, `prepare`, `flipTargets`, `waitFor`, `finish`, `duration` ou `easing`.
 

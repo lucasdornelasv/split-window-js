@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { SplitAnimationContext, SplitAnimationFrame } from '@split-window/core';
+import {
+  SPLIT_DEFAULT_EASING,
+  SPLIT_DEFAULT_HIDE_EASING,
+  type SplitAnimationContext,
+  type SplitAnimationFrame,
+} from '@split-window/core';
 import {
   SPLIT_CSS_ANIMATION_STYLE_ID,
   SplitCssAnimationEngine,
@@ -123,6 +128,54 @@ describe('SplitCssAnimationEngine', () => {
     expect(host.style.width).toBe('');
     expect(host.style.transition).toBe('');
     expect(target.style.paddingRight).toBe(before);
+  });
+
+  it('decelerates the inline transitions on show and accelerates them on hide', () => {
+    const engine = new SplitCssAnimationEngine();
+    const push = {
+      layout: 'push' as const,
+      options: { preset: 'collapse' as const, duration: 300, respectReducedMotion: true },
+      from: frame({ hostSize: '0px' }),
+      to: frame({ hostSize: '300px' }),
+      properties: { host: 'width' as const, push: null },
+    };
+    const show = context(push);
+    void engine.animate(show.ctx);
+    expect(show.host.style.transition).toContain(SPLIT_DEFAULT_EASING);
+    const hide = context({ ...push, phase: 'hide' });
+    void engine.animate(hide.ctx);
+    expect(hide.host.style.transition).toContain(SPLIT_DEFAULT_HIDE_EASING);
+  });
+
+  it('sets both easing variables from the easing option', () => {
+    const { ctx, shell } = context({
+      options: { preset: 'fade', easing: 'linear', respectReducedMotion: true },
+    });
+    void new SplitCssAnimationEngine().animate(ctx);
+    expect(shell.style.getPropertyValue('--split-animation-easing')).toBe('linear');
+    expect(shell.style.getPropertyValue('--split-animation-easing-hide')).toBe('linear');
+  });
+
+  it('does not animate the sizes with fade: the open layout stays during the transition', () => {
+    const engine = new SplitCssAnimationEngine();
+    const target = document.createElement('main');
+    target.style.paddingRight = 'calc(0px + 300px)';
+    const open = target.style.paddingRight;
+    for (const phase of ['show', 'hide'] as const) {
+      const { ctx, host, shell } = context({
+        phase,
+        layout: 'push',
+        options: { preset: 'fade', duration: 300, respectReducedMotion: true },
+        from: frame({ hostSize: '0px', push: '0px' }),
+        to: frame({ hostSize: '300px', push: '300px' }),
+        properties: { host: 'width', push: 'padding-right' },
+      });
+      void engine.animate({ ...ctx, elements: { ...ctx.elements, pushTarget: target } });
+      expect(shell.getAttribute('data-split-animation')).toBe('fade');
+      expect(host.style.width).toBe('');
+      expect(target.style.transition).toBe('');
+      expect(target.style.paddingRight).toBe(open);
+    }
   });
 
   it('marks the backdrop and lets subclasses change the classes', () => {

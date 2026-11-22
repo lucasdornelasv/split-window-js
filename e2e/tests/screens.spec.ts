@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { container, gotoPage, tab, tabLabels, tabRole } from './helpers';
 
 test.describe('Início rápido', () => {
@@ -16,6 +16,29 @@ test.describe('Início rápido', () => {
     await page.locator('[data-action="open-note"]').click();
     await container(page, 'body-right').locator('.split-tab__close').click();
     await expect(page.locator('.split-body-host--right')).toBeHidden();
+  });
+
+  test('a tab as a request: setInputData updates it and close emits the result', async ({
+    page,
+  }) => {
+    await gotoPage(page, 'inicio');
+    await page.locator('[data-action="open-request"]').click();
+    const body = container(page, 'body-right');
+    await expect(page.locator('[data-field="request-status"]')).toHaveText('aguardando');
+    await expect(body.locator('.note__text')).toHaveText('Aguardando resposta');
+    await page.locator('[data-action="update-inputs"]').click();
+    await expect(body.locator('.note__text')).toContainText('Atualizado às');
+    await body.locator('.note__close').click();
+    await expect(page.locator('[data-field="request-result"]')).toHaveText('done');
+    await expect(page.locator('[data-field="request-status"]')).toHaveText('concluída');
+  });
+
+  test('a tab as a request completes without a value when dismissed', async ({ page }) => {
+    await gotoPage(page, 'inicio');
+    await page.locator('[data-action="open-request"]').click();
+    await container(page, 'body-right').locator('.split-tab__close').click();
+    await expect(page.locator('[data-field="request-status"]')).toHaveText('concluída');
+    await expect(page.locator('[data-field="request-result"]')).toHaveText('—');
   });
 });
 
@@ -105,6 +128,53 @@ test.describe('Modos e animação', () => {
       .poll(() => page.evaluate(() => getComputedStyle(document.body).paddingRight))
       .toBe('0px');
   });
+
+  for (const engine of ['css', 'keyframes']) {
+    test(`push with fade (${engine}): the page resizes at once on show and after the fade on hide`, async ({
+      page,
+    }) => {
+      await gotoPage(page, 'playground');
+      await page.locator('[data-edit="body-right"]').click();
+      await page.locator('[data-field="mode"]').selectOption('push');
+      await page.locator('[data-field="size"]').fill('300px');
+      await page.locator('[data-field="animation"]').check();
+      await page.locator('[data-field="engine"]').selectOption(engine);
+      await page.locator('[data-field="preset"]').selectOption('fade');
+      await page.locator('[data-field="duration"]').fill('600');
+      // Samples the padding of the page and the panel visibility on every frame.
+      const base = await page.evaluate(() => {
+        const w = window as unknown as { samples: { padding: number; open: boolean }[] };
+        w.samples = [];
+        const tick = () => {
+          const host = document.querySelector<HTMLElement>('.split-body-host--right');
+          w.samples.push({
+            padding: parseFloat(getComputedStyle(document.body).paddingRight),
+            open: !!host && host.checkVisibility(),
+          });
+          requestAnimationFrame(tick);
+        };
+        tick();
+        return w.samples[0].padding;
+      });
+      const shell = container(page, 'body-right');
+
+      await page.locator('[data-action="open"]').click();
+      await expect(tabLabels(page, 'body-right')).toHaveText(['Nova aba']);
+      await expect(shell).not.toHaveClass(/split-animating/);
+      await page.locator('[data-action="dismiss-all"]').click();
+      await expect(page.locator('.split-body-host--right')).toBeHidden();
+
+      const samples = await page.evaluate(
+        () => (window as unknown as { samples: { padding: number; open: boolean }[] }).samples,
+      );
+      // No size in between: while the panel is on screen (fading in or out), the page has
+      // its final size; before and after, the original one.
+      expect(new Set(samples.map((s) => s.padding))).toEqual(new Set([base, base + 300]));
+      expect(samples.filter((s) => s.open).every((s) => s.padding === base + 300)).toBe(true);
+      expect(samples.some((s) => s.open)).toBe(true);
+      expect(samples.at(-1)).toEqual({ padding: base, open: false });
+    });
+  }
 });
 
 test.describe('Abas e numeração', () => {
@@ -260,56 +330,124 @@ test.describe('Erros', () => {
 });
 
 test.describe('Playground', () => {
-  test('each field changes the container and the generated code', async ({ page }) => {
-    await gotoPage(page, 'playground');
-    const code = page.locator('demo-example[data-example="playground"] pre code');
-    await page.locator('[data-field="maxTabs"]').fill('2');
-    await expect(code).toContainText('maxTabs: 2');
-    await page.locator('[data-field="onFull"]').selectOption('replace-oldest');
-    await expect(code).toContainText("onFull: 'replace-oldest'");
-    await page.locator('[data-field="onReject"]').selectOption('cancel');
-    await expect(code).toContainText("onReject: 'cancel'");
-    await page.locator('[data-field="label"]').fill('Meu painel');
-    await expect(code).toContainText("label: 'Meu painel'");
-    await page.locator('[data-field="closeWhenEmpty"]').check();
-    await expect(code).toContainText('closeWhenEmpty: true');
-    await page.locator('[data-field="expandMaxWidth"]').fill('60vw');
-    await expect(code).toContainText("maxWidth: '60vw'");
-    await page.locator('[data-field="expandMargin"]').fill('12');
-    await expect(code).toContainText('margin: 12');
-    await page.locator('[data-field="expandAlign"]').selectOption('end');
-    await expect(code).toContainText("align: 'end'");
-    await page.locator('[data-field="expand"]').uncheck();
-    await expect(code).toContainText('expand: false');
-    await page.locator('[data-field="title"]').fill('Pedido');
-    await expect(code).toContainText("title: 'Pedido'");
-    await page.locator('[data-field="groupKey"]').fill('vendas');
-    await expect(code).toContainText("groupKey: 'vendas'");
-    await page.locator('[data-field="activate"]').uncheck();
-    await expect(code).toContainText('activate: false');
-    await page.locator('[data-field="closable"]').uncheck();
-    await expect(code).toContainText('closable: false');
-    await page.locator('[data-field="confirmClose"]').check();
-    await expect(code).toContainText('canClose');
-    await page.locator('[data-field="lockToContainer"]').check();
-    await expect(code).toContainText('canMove');
+  const code = (page: Page) => page.locator('demo-example[data-example="playground"] pre code');
 
-    const open = page.locator('[data-action="open"]');
-    await open.click();
-    await open.click();
-    await open.click();
+  test('each container option changes the selected container and the generated code', async ({
+    page,
+  }) => {
+    await gotoPage(page, 'playground');
+    await expect(page.locator('[data-field="editing"]')).toHaveText('esquerdo');
+    await page.locator('[data-field="label"]').fill('Meu painel');
+    await expect(code(page)).toContainText("label: 'Meu painel'");
+    await page.locator('[data-field="maxTabs"]').fill('2');
+    await expect(code(page)).toContainText('maxTabs: 2');
+    await page.locator('[data-field="onFull"]').selectOption('replace-oldest');
+    await expect(code(page)).toContainText("onFull: 'replace-oldest'");
+    await page.locator('[data-field="onReject"]').selectOption('cancel');
+    await expect(code(page)).toContainText("onReject: 'cancel'");
+    await page.locator('[data-field="closeWhenEmpty"]').check();
+    await expect(code(page)).toContainText('closeWhenEmpty: true');
+    await page.locator('[data-field="size"]').fill('240px');
+    await expect(code(page)).toContainText("size: '240px'");
+    await page.locator('[data-field="animation"]').check();
+    await expect(code(page)).toContainText('animation: true');
+    await page.locator('[data-field="engine"]').selectOption('keyframes');
+    await page.locator('[data-field="preset"]').selectOption('fade');
+    await page.locator('[data-field="duration"]').fill('150');
+    await expect(code(page)).toContainText("engine: 'keyframes'");
+    await expect(code(page)).toContainText("preset: 'fade'");
+    await expect(code(page)).toContainText('duration: 150');
+    await page.locator('[data-field="panelClass"]').fill('demo-drawer');
+    await expect(code(page)).toContainText("panelClass: 'demo-drawer'");
+    await page.locator('[data-field="expandMaxWidth"]').fill('60vw');
+    await expect(code(page)).toContainText("maxWidth: '60vw'");
+    await page.locator('[data-field="expandMargin"]').fill('12');
+    await expect(code(page)).toContainText('margin: 12');
+    await page.locator('[data-field="expandAlign"]').selectOption('end');
+    await expect(code(page)).toContainText("align: 'end'");
+    await page.locator('[data-field="dropZoneWidth"]').fill('300');
+    await expect(code(page)).toContainText('width: 300');
+    await page.locator('[data-field="expand"]').uncheck();
+    await expect(code(page)).toContainText('expand: false');
+
+    await page.locator('[data-field="target"]').selectOption('esquerdo');
+    await page.locator('[data-field="title"]').fill('Pedido');
+    await page.locator('[data-field="groupKey"]').fill('vendas');
+    await page.locator('[data-field="text"]').fill('Olá');
+    await page.locator('[data-field="activate"]').uncheck();
+    await page.locator('[data-field="closable"]').uncheck();
+    await page.locator('[data-field="confirmClose"]').check();
+    await page.locator('[data-field="lockToContainer"]').check();
+    for (const text of [
+      "containerKey: 'esquerdo'",
+      "title: 'Pedido'",
+      "groupKey: 'vendas'",
+      "text: 'Olá'",
+      'activate: false',
+      'closable: false',
+      'canClose',
+      'canMove',
+    ]) {
+      await expect(code(page)).toContainText(text);
+    }
+
+    await page.locator('[data-action="open-3"]').click();
     // maxTabs 2 + replace-oldest: the oldest inactive tab is replaced
-    await expect(tabLabels(page, 'playground')).toHaveCount(2);
-    await expect(container(page, 'playground').locator('.split-tab__close')).toHaveCount(0);
-    await expect(container(page, 'playground').locator('.split-expand-button')).toHaveCount(0);
+    await expect(tabLabels(page, 'esquerdo')).toHaveCount(2);
+    await expect(container(page, 'esquerdo').locator('.split-tab__close')).toHaveCount(0);
+    await expect(container(page, 'esquerdo').locator('.split-expand-button')).toHaveCount(0);
+    await expect(container(page, 'esquerdo')).toHaveClass(/demo-drawer/);
+  });
+
+  test('containers of the page and of the body can be enabled, edited and set as default', async ({
+    page,
+  }) => {
+    await gotoPage(page, 'playground');
+    await expect(page.locator('[data-field="effective-default"]')).toHaveText('body-right');
+
+    await page.locator('[data-enable="body-left"]').check();
+    await page.locator('[data-edit="body-left"]').click();
+    await expect(page.locator('[data-field="editing"]')).toHaveText('body-left');
+    await page.locator('[data-field="mode"]').selectOption('push');
+    await page.locator('[data-field="size"]').fill('300px');
+    await expect(code(page)).toContainText("mode: 'push'");
+    await page.locator('[data-default="body-left"]').check();
+    await expect(page.locator('[data-field="effective-default"]')).toHaveText('body-left');
+    await expect(code(page)).toContainText("registry.setDefaultContainer('body-left')");
+    await page.locator('[data-action="open"]').click();
+    await expect(tabLabels(page, 'body-left')).toHaveText(['Nova aba']);
+    await expect(page.locator('.split-body-host--left')).toBeVisible();
+
+    await page.locator('[data-enable="direito"]').check();
+    await expect(code(page)).toContainText("registry.registerContainer('direito', hostDireito");
+    await page.locator('[data-field="target"]').selectOption('direito');
+    await page.locator('[data-field="title"]').fill('No push');
+    await page.locator('[data-action="open"]').click();
+    await expect(tabLabels(page, 'direito')).toHaveText(['No push']);
+
+    // Disabling the default goes back to the automatic default.
+    await page.locator('[data-enable="body-left"]').uncheck();
+    await expect(page.locator('[data-field="effective-default"]')).toHaveText('body-right');
+    await expect(page.locator('.split-body-host--left')).toHaveCount(0);
+  });
+
+  test('errors are shown on the page', async ({ page }) => {
+    await gotoPage(page, 'playground');
+    await page.locator('[data-field="maxTabs"]').fill('1');
+    await page.locator('[data-field="target"]').selectOption('esquerdo');
+    await page.locator('[data-action="open-3"]').click();
+    await expect(page.locator('[data-field="error"]')).toContainText('SplitContainerFullError');
   });
 
   test('reset restores the defaults', async ({ page }) => {
     await gotoPage(page, 'playground');
     await page.locator('[data-field="maxTabs"]').fill('2');
+    await page.locator('[data-enable="body-top"]').check();
     await page.locator('[data-action="reset"]').click();
-    await expect(page.locator('demo-example[data-example="playground"] pre code')).toContainText(
-      "registerContainer('playground', host, {})",
+    await expect(code(page)).toContainText(
+      "registry.registerContainer('esquerdo', hostEsquerdo, {\n  label: 'Esquerdo',\n  side: 'left',\n});",
     );
+    await expect(code(page)).not.toContainText('maxTabs');
+    await expect(code(page)).not.toContainText('top');
   });
 });

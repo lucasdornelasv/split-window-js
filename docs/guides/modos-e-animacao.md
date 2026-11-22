@@ -79,8 +79,9 @@ provideSplitWindows({
 
 - Uma classe usada direto em `animation.engine` (ou em `animation`) é criada num contexto de injeção, então também pode usar `inject()`.
 - Sem motor escolhido, vale o **primeiro registrado**. O `NoopSplitAnimationEngine` só é usado quando nenhum motor foi registrado ou quando `'none'` é escolhido. Mesmo sem mover nada, ele passa por `started()` e `progress(1)` de forma síncrona, e os eventos de `containerTransitions` saem do mesmo jeito.
-- `preset`: `slide` (padrão de overlay e do push no body), `collapse` (padrão do push custom: só o tamanho do host), `fade` (padrão do inline) ou `none`.
-- `duration`, `easing` e `delay` valem para todos os motores. O motor CSS também lê `--split-animation-duration`, `--split-animation-easing` e `--split-animation-delay`.
+- `preset`: `slide` (padrão de overlay e do push no body), `collapse` (padrão do push custom: só o tamanho do host), `fade` (padrão do inline) ou `none`. Só `slide` e `collapse` animam os tamanhos do layout (o host custom em `push` e o padding da página no push do body). Com `fade`, só a opacidade do painel muda: ao abrir, a página já encolhe no início, e ao fechar ela só volta ao tamanho normal depois do fim do fade. Keyframes `host`/`push` passados ao `SplitKeyframesAnimationEngine` tocam com qualquer preset.
+- `duration`, `easing` e `delay` valem para todos os motores. O motor CSS também lê `--split-animation-duration`, `--split-animation-easing`, `--split-animation-easing-hide` e `--split-animation-delay`.
+- Sem `easing`, a abertura desacelera (`SPLIT_DEFAULT_EASING`, `cubic-bezier(0.2, 0, 0, 1)`) e o fechamento acelera (`SPLIT_DEFAULT_HIDE_EASING`, `cubic-bezier(0.4, 0, 1, 1)`). Assim o painel só some de vez no fim da duração, junto com o que vem depois (a página voltando ao tamanho no `push`). Com `easing`, a mesma curva vale para os dois.
 - Com `prefers-reduced-motion: reduce`, o motor é trocado pelo noop (desligue com `respectReducedMotion: false`).
 - O padrão é sem animação; `animation: true` (no container ou em `containerDefaults`) liga.
 

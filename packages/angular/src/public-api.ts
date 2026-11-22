@@ -86,6 +86,8 @@ export {
   SplitFunctionAnimationEngine,
   SplitAnimationEngineRegistry,
   SPLIT_DEFAULT_EASING,
+  SPLIT_DEFAULT_HIDE_EASING,
+  defaultEasing,
   SPLIT_NOOP_ANIMATION_ENGINE,
 } from '@split-window/core';
 export type {

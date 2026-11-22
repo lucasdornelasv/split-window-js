@@ -2,6 +2,11 @@
 
 Os pacotes `@split-window/core`, `@split-window/css-animation`, `@split-window/keyframes-animation` e `@split-window/angular` saem juntos, com a mesma versão (semver em lockstep).
 
+## Não publicado
+
+- Preset `fade` no `push`: os motores CSS e keyframes não animam mais o tamanho do host nem o padding da página com `fade` (só com `slide` e `collapse`). Ao abrir, o conteúdo encolhe na hora e o painel aparece com fade; ao fechar, o conteúdo volta ao tamanho normal só depois do fim do fade. Novo método protegido `animatesSizes(ctx)` nos dois motores.
+- Easing padrão por fase: a abertura continua desacelerando (`SPLIT_DEFAULT_EASING`) e o fechamento passa a acelerar (`SPLIT_DEFAULT_HIDE_EASING`, `cubic-bezier(0.4, 0, 1, 1)`). Com a curva antiga, o painel parecia sumido bem antes do fim e a página voltando no `push` parecia atrasada. Novos `defaultEasing(phase)` (core, reexportado pelo Angular) e variável CSS `--split-animation-easing-hide`. A opção `easing` continua valendo para as duas fases.
+
 ## 0.5.0 — 2026-11-21
 
 - `provideSplitWindows({ bodyContainers })`: liga os containers do body na criação do registry, sem `provideAppInitializer`. `true` equivale a `useBodyContainers()` (só `body-right`, como padrão) e um objeto é repassado como está. Novo token `SPLIT_BODY_CONTAINERS`.

@@ -1,6 +1,6 @@
 import {
-  SPLIT_DEFAULT_EASING,
   SplitAnimationEngine,
+  defaultEasing,
   type SplitAnimationContext,
   type SplitAnimationFrame,
 } from '@split-window/core';
@@ -81,7 +81,7 @@ export class SplitKeyframesAnimationEngine extends SplitAnimationEngine<HTMLElem
   protected timing(ctx: SplitAnimationContext<HTMLElement>): KeyframeAnimationOptions {
     return {
       duration: ctx.options.duration ?? 200,
-      easing: ctx.options.easing ?? SPLIT_DEFAULT_EASING,
+      easing: ctx.options.easing ?? defaultEasing(ctx.phase),
       delay: ctx.options.delay ?? 0,
       // Holds the end state until `cleanup`, which runs right before the final layout.
       fill: 'both',
@@ -97,22 +97,21 @@ export class SplitKeyframesAnimationEngine extends SplitAnimationEngine<HTMLElem
     targets.push({ element: elements.shell, keyframes: custom ?? this.shellKeyframes(ctx) });
     if (ctx.options.preset === 'none') return targets;
 
+    // Keyframes given in the config always play; the preset ones only when sizes animate.
+    const sizes = this.animatesSizes(ctx);
     if (properties.host && from.hostSize !== null && to.hostSize !== null) {
       const key = camel(properties.host);
-      targets.push({
-        element: elements.host,
-        keyframes: this.read(config.host, ctx, true) ?? [
-          { [key]: from.hostSize },
-          { [key]: to.hostSize },
-        ],
-      });
+      const keyframes =
+        this.read(config.host, ctx, true) ??
+        (sizes ? [{ [key]: from.hostSize }, { [key]: to.hostSize }] : null);
+      if (keyframes) targets.push({ element: elements.host, keyframes });
     }
     if (properties.push && elements.pushTarget && from.push !== null && to.push !== null) {
       const key = camel(properties.push);
-      targets.push({
-        element: elements.pushTarget,
-        keyframes: this.read(config.push, ctx, true) ?? [{ [key]: from.push }, { [key]: to.push }],
-      });
+      const keyframes =
+        this.read(config.push, ctx, true) ??
+        (sizes ? [{ [key]: from.push }, { [key]: to.push }] : null);
+      if (keyframes) targets.push({ element: elements.pushTarget, keyframes });
     }
     if (elements.backdrop) {
       const show = phase === 'show';
@@ -125,6 +124,15 @@ export class SplitKeyframesAnimationEngine extends SplitAnimationEngine<HTMLElem
       });
     }
     return targets;
+  }
+
+  /**
+   * Whether the preset animates the sizes that change with the layout (host size, push
+   * padding): with `slide` and `collapse`. With `fade` they change at once: the open layout
+   * is applied at the start of a show and removed only after a hide.
+   */
+  protected animatesSizes(ctx: SplitAnimationContext<HTMLElement>): boolean {
+    return ctx.options.preset === 'slide' || ctx.options.preset === 'collapse';
   }
 
   /** Keyframes of the shell for the preset. */

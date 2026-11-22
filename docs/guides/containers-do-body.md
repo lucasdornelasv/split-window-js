@@ -56,7 +56,7 @@ manager.open(NoteTabComponent, { containerKey: 'body-left', title: 'Aba left' })
 - **Reconfiguração:** `useBodyContainers` pode ser chamado de novo, antes ou depois de registrar outros containers. A configuração nova substitui a anterior: lados não informados são desabilitados, e as abas abertas neles recebem `dismiss('container-removed')`.
 - Lados mantidos conservam as abas e recebem as opções novas. Um `maxTabs` menor que o número de abas abertas só vale para as próximas chegadas.
 - O padrão só muda se `default` for informado. `default` apontando para um lado não habilitado lança `SplitContainerNotFoundError`.
-- Desabilitar o lado que é o padrão deixa a aplicação sem padrão.
+- Desabilitar o lado que é o padrão faz o padrão voltar a ser automático: o primeiro container que restou.
 - `mode: 'push'` soma `size` ao padding de `pushTarget` (padrão `document.body`) enquanto o container está aberto e define `--split-body-offset-<lado>` no `<html>`.
 - `backdrop: true` bloqueia a página atrás do container enquanto ele está aberto. Clicar no backdrop **não** fecha abas.
 - `open()` com `containerKey` de um lado não habilitado lança `SplitContainerNotFoundError` com a mensagem "O container 'body-left' não está habilitado. Habilite-o com useBodyContainers()."

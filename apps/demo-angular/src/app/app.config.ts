@@ -1,11 +1,6 @@
-import {
-  inject,
-  provideAppInitializer,
-  provideBrowserGlobalErrorListeners,
-  type ApplicationConfig,
-} from '@angular/core';
+import { provideBrowserGlobalErrorListeners, type ApplicationConfig } from '@angular/core';
 import { provideRouter, withHashLocation } from '@angular/router';
-import { SplitContainerRegistry, provideSplitWindows } from '@split-window/angular';
+import { provideSplitWindows } from '@split-window/angular';
 import { SplitCssAnimationEngine } from '@split-window/css-animation';
 import { SplitKeyframesAnimationEngine } from '@split-window/keyframes-animation';
 import { routes } from './app.routes';
@@ -15,6 +10,8 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withHashLocation()),
     provideSplitWindows({
+      // Minimal configuration: only body-right, no tab limit, as the default container.
+      bodyContainers: true,
       // Animation engines by name; an animated container without `engine` uses the first.
       animationEngines: {
         css: new SplitCssAnimationEngine(),
@@ -29,10 +26,6 @@ export const appConfig: ApplicationConfig = {
           animation: { preset: 'slide', duration: 260 },
         },
       },
-    }),
-    provideAppInitializer(() => {
-      // Minimal configuration: only body-right, no tab limit, as the default container.
-      inject(SplitContainerRegistry).useBodyContainers();
     }),
   ],
 };

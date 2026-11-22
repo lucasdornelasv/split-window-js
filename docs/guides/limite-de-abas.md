@@ -58,7 +58,7 @@ O contexto (`SplitCapacityContext`) traz `containerKey`, `tabs` (na ordem da bar
 - As estratégias pré-definidas nunca substituem a aba ativa, abas com `canClose` nem abas com `closable: false`. Se nenhuma servir, a aba nova é rejeitada. Com `maxTabs: 1`, elas sempre rejeitam.
 - Se uma função de `onFull` devolver uma aba com `canClose`, ou que não está no container, a aba nova é rejeitada.
 - Em movimentos (`source: 'move'`), as estratégias pré-definidas só rejeitam; uma função customizada pode decidir diferente.
-- Um redirecionamento passa pelas políticas do destino. Um container já tentado na mesma abertura não é tentado de novo; se a cadeia se esgotar (ou `redirect-default` sem padrão), `open()` lança `SplitContainerFullError` com os containers tentados (`triedKeys`).
+- Um redirecionamento passa pelas políticas do destino. Um container já tentado na mesma abertura não é tentado de novo; se a cadeia se esgotar (por exemplo, `redirect-default` quando o padrão, explícito ou o primeiro container, é o próprio container cheio), `open()` lança `SplitContainerFullError` com os containers tentados (`triedKeys`).
 - Em movimentos, `onReject` não se aplica: o arraste é cancelado e `moveTo()` devolve `false`.
 - Toda rejeição dispara `manager.tabRejected` com `context`, `resolution` (`'throw' | 'cancel' | 'redirect' | 'move-refused'`) e `redirectTo`.
 - `maxTabs` deve ser inteiro maior que zero; outro valor lança `SplitInvalidOptionError`.

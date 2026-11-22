@@ -53,6 +53,7 @@ manager.containerTransitions.subscribe(({ key, phase, state }) => ...);
 - `tabMoved.type` é `'reordered'` ou `'containerChanged'`. `tabRejected.resolution` é `'throw'`, `'cancel'`, `'redirect'` ou `'move-refused'` (movimentos).
 - Uma ref rejeitada por `onReject: 'cancel'` já nasce com `hidden` emitido e os observables completos.
 - Dentro do componente, prefira os signals do `SplitActiveWindow` (`containerKey()`, `label()`, `isActive()`), que já seguem esses eventos.
+- Para tratar a aba como uma requisição RxJS, use `ref.asRequest()` (emite o resultado do `close`) e `ref.attachTo(subscription)` (liga a aba a uma `Subscription`); veja o [início rápido](inicio-rapido.md#a-aba-como-requisição).
 
 ## Links
 

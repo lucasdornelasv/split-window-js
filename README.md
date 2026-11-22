@@ -65,6 +65,7 @@ Um guia por tela do app de demonstração ([índice](docs/guides/README.md)):
 | [Início rápido](docs/guides/inicio-rapido.md)           | `#/inicio`     |
 | [Containers](docs/guides/containers.md)                 | `#/containers` |
 | [Containers do body](docs/guides/containers-do-body.md) | `#/body`       |
+| [Modos e animação](docs/guides/modos-e-animacao.md)     | `#/modos`      |
 | [Abas e numeração](docs/guides/abas-e-numeracao.md)     | `#/abas`       |
 | [Limite de abas](docs/guides/limite-de-abas.md)         | `#/limite`     |
 | [Fechamento](docs/guides/fechamento.md)                 | `#/fechamento` |
@@ -78,25 +79,26 @@ Referência da API do core: `npm run docs:api` (gera `docs/api`). A especificaç
 
 ## Desenvolvimento
 
-O repositório usa **npm workspaces** (`packages/core`, `packages/angular` e `e2e`) com o Angular CLI; o app de demonstração fica em `apps/demo-angular`.
+O repositório usa **npm workspaces** (`packages/core`, `packages/css-animation`, `packages/keyframes-animation`, `packages/angular` e `e2e`) com o Angular CLI; o app de demonstração fica em `apps/demo-angular`.
 
 ```bash
 npm install
 ```
 
-| Comando                                            | O que faz                                                                                                                                                   |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm start`                                        | Sobe o app de demonstração (`ng serve demo-angular`), em `http://localhost:4200`.                                                                           |
-| `npm run build`                                    | Compila o core (`tsc`), o adaptador Angular (ng-packagr) e o app de demonstração. Também: `build:core`, `build:angular`, `build:demo`.                      |
-| `npm test`                                         | Testes do core (Vitest, sem DOM) e do adaptador Angular (zoneless).                                                                                         |
-| `npm run test:core` / `npm run test:core:coverage` | Só o core, com ou sem cobertura.                                                                                                                            |
-| `npm run test:angular`                             | Só o adaptador Angular, zoneless (`ng test angular --watch=false`).                                                                                         |
-| `npm run test:angular -- -c zone`                  | Adaptador Angular com `zone.js`.                                                                                                                            |
-| `npm run e2e`                                      | Playwright em Chromium, Firefox e WebKit sobre o app de demonstração (sobe o servidor na porta 4300). Rode `npx playwright install` antes, na primeira vez. |
-| `npm run lint`                                     | ESLint (`eslint .`).                                                                                                                                        |
-| `npm run format` / `npm run format:check`          | Prettier.                                                                                                                                                   |
-| `npm run typecheck`                                | `tsc --noEmit` no core, no adaptador e no app.                                                                                                              |
-| `npm run docs:api`                                 | Referência da API do core com TypeDoc, em `docs/api`.                                                                                                       |
+| Comando                                            | O que faz                                                                                                                                                                        |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm start`                                        | Sobe o app de demonstração (`ng serve demo-angular`), em `http://localhost:4200`.                                                                                                |
+| `npm run build`                                    | Compila o core e os motores de animação (`tsc`), o adaptador Angular (ng-packagr) e o app de demonstração. Também: `build:core`, `build:engines`, `build:angular`, `build:demo`. |
+| `npm test`                                         | Testes do core (Vitest, sem DOM, com cobertura), dos motores de animação e do adaptador Angular (zoneless e com `zone.js`). Também: `test:engines`.                              |
+| `npm run test:core` / `npm run test:core:coverage` | Só o core, com ou sem cobertura.                                                                                                                                                 |
+| `npm run test:angular`                             | Só o adaptador Angular, zoneless (`ng test angular --watch=false`).                                                                                                              |
+| `npm run test:angular -- -c zone`                  | Adaptador Angular com `zone.js`.                                                                                                                                                 |
+| `npm run e2e`                                      | Playwright em Chromium, Firefox e WebKit sobre o app de demonstração (sobe o servidor na porta 4300). Rode `npx playwright install` antes, na primeira vez.                      |
+| `npm run lint`                                     | ESLint (`eslint .`).                                                                                                                                                             |
+| `npm run format` / `npm run format:check`          | Prettier.                                                                                                                                                                        |
+| `npm run typecheck`                                | `tsc --noEmit` no core, nos motores, no adaptador, no app e no e2e.                                                                                                              |
+| `npm run docs:api`                                 | Referência da API do core e dos motores com TypeDoc, em `docs/api`.                                                                                                              |
+| `npm run release`                                  | Publica os pacotes no npm (veja [Publicação](#publicação)).                                                                                                                      |
 
 Os testes end-to-end usam só roles e atributos `data-*`; `DEMO_URL` (ou `DEMO_COMMAND` e `DEMO_PORT`) permite rodá-los contra outro servidor.
 

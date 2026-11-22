@@ -1,6 +1,6 @@
 import {
-  SPLIT_DEFAULT_EASING,
   SplitAnimationEngine,
+  defaultEasing,
   SplitStyleStash,
   reflow,
   transitionTimeMs,
@@ -148,7 +148,12 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
       stash.set(shell, '--split-animation-duration', `${options.duration}ms`);
       if (backdrop) stash.set(backdrop, '--split-animation-duration', `${options.duration}ms`);
     }
-    if (options.easing !== undefined) stash.set(shell, '--split-animation-easing', options.easing);
+    if (options.easing !== undefined) {
+      for (const el of backdrop ? [shell, backdrop] : [shell]) {
+        stash.set(el, '--split-animation-easing', options.easing);
+        stash.set(el, '--split-animation-easing-hide', options.easing);
+      }
+    }
     if (options.delay !== undefined)
       stash.set(shell, '--split-animation-delay', `${options.delay}ms`);
     const offsetX = from.rect.x - to.rect.x;
@@ -159,9 +164,18 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
     stash.set(shell, '--split-to-y', `${phase === 'hide' ? -offsetY : 0}px`);
   }
 
+  /**
+   * Whether the sizes that change with the layout (host size, push padding) are animated:
+   * with `slide` and `collapse`. With `fade` (and `none`) they change at once: the open layout
+   * is applied at the start of a show and removed only after a hide.
+   */
+  protected animatesSizes(ctx: SplitAnimationContext<HTMLElement>): boolean {
+    return ctx.options.preset === 'slide' || ctx.options.preset === 'collapse';
+  }
+
   /** Sizes animated with inline transitions. */
   protected flipTargets(ctx: SplitAnimationContext<HTMLElement>): SplitCssFlipTarget[] {
-    if (ctx.options.preset === 'none') return [];
+    if (!this.animatesSizes(ctx)) return [];
     const targets: SplitCssFlipTarget[] = [];
     const { from, to, properties, elements } = ctx;
     if (properties.host && from.hostSize !== null && to.hostSize !== null) {
@@ -241,12 +255,11 @@ export class SplitCssAnimationEngine extends SplitAnimationEngine<HTMLElement> {
     return cssVar(ctx.elements.shell, '--split-animation-duration') || '200ms';
   }
 
-  /** Easing of the inline transitions. */
+  /** Easing of the inline transitions: the option, the CSS variable of the phase, or the default. */
   protected easing(ctx: SplitAnimationContext<HTMLElement>): string {
-    return (
-      ctx.options.easing ??
-      (cssVar(ctx.elements.shell, '--split-animation-easing') || SPLIT_DEFAULT_EASING)
-    );
+    const variable =
+      ctx.phase === 'hide' ? '--split-animation-easing-hide' : '--split-animation-easing';
+    return ctx.options.easing ?? (cssVar(ctx.elements.shell, variable) || defaultEasing(ctx.phase));
   }
 }
 

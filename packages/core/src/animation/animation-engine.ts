@@ -46,7 +46,11 @@ export interface SplitAnimationProperties {
   readonly push: string | null;
 }
 
-/** Looks the engines understand: `slide` from the side, `fade`, `collapse` (sizes only), `none`. */
+/**
+ * Looks the engines understand: `slide` from the side, `collapse` (sizes only), `none`, and
+ * `fade` (opacity only: the sizes of the layout, like the push padding, change at once, at the
+ * start of a show and at the end of a hide).
+ */
 export type SplitAnimationPreset = 'slide' | 'fade' | 'collapse' | 'none';
 
 /** Animation options after merging the global defaults, the mode and the container. */
@@ -54,6 +58,7 @@ export interface SplitAnimationSettings {
   readonly preset: SplitAnimationPreset;
   /** In ms. Without a value, each engine uses its own default. */
   readonly duration?: number;
+  /** For show and hide. Without a value: `defaultEasing(phase)`. */
   readonly easing?: string;
   /** In ms. */
   readonly delay?: number;
@@ -160,6 +165,10 @@ export interface SplitAnimationOptions<TElement = unknown> {
   /** Default: `slide` for overlay and body push, `collapse` for custom push, `fade` for inline. */
   preset?: SplitAnimationPreset;
   duration?: number;
+  /**
+   * For show and hide. Default: decelerating on show (`SPLIT_DEFAULT_EASING`), accelerating
+   * on hide (`SPLIT_DEFAULT_HIDE_EASING`).
+   */
   easing?: string;
   delay?: number;
   /** With reduced motion, transitions end at once. Default: `true`. */
@@ -178,8 +187,20 @@ export type SplitAnimationInput<TElement = unknown> =
   | SplitAnimationEngineClass<TElement>
   | SplitAnimationFn<TElement>;
 
-/** Easing used when nothing else is configured. */
+/** Easing of a show when nothing else is configured (decelerates: fast start, soft landing). */
 export const SPLIT_DEFAULT_EASING = 'cubic-bezier(0.2, 0, 0, 1)';
+
+/**
+ * Easing of a hide when nothing else is configured (accelerates). A decelerating curve on a
+ * hide makes the panel look gone long before the transition ends, so what follows it (the
+ * page growing back in `push`) looks late.
+ */
+export const SPLIT_DEFAULT_HIDE_EASING = 'cubic-bezier(0.4, 0, 1, 1)';
+
+/** Default easing of a phase: `SPLIT_DEFAULT_EASING` on show, `SPLIT_DEFAULT_HIDE_EASING` on hide. */
+export function defaultEasing(phase: 'show' | 'hide'): string {
+  return phase === 'hide' ? SPLIT_DEFAULT_HIDE_EASING : SPLIT_DEFAULT_EASING;
+}
 
 /** Whether a value is an engine instance (duck typed, so it works across bundles). */
 export function isAnimationEngine(value: unknown): value is SplitAnimationEngine<any> {

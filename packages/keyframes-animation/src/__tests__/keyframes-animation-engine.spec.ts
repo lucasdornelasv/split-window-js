@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SplitAnimationContext, SplitAnimationFrame } from '@split-window/core';
+import {
+  SPLIT_DEFAULT_EASING,
+  SPLIT_DEFAULT_HIDE_EASING,
+  type SplitAnimationContext,
+  type SplitAnimationFrame,
+} from '@split-window/core';
 import { SplitKeyframesAnimationEngine } from '../index.js';
 
 const frame = (patch: Partial<SplitAnimationFrame> = {}): SplitAnimationFrame => ({
@@ -105,6 +110,49 @@ describe('SplitKeyframesAnimationEngine', () => {
     expect(animations[0].keyframes).toEqual([{ width: '300px' }, { width: '0px' }]);
     expect(animations[1].keyframes).toEqual([{ paddingRight: '300px' }, { paddingRight: '0px' }]);
     expect(animations[2].keyframes).toEqual([{ opacity: 1 }, { opacity: 0.2 }]);
+  });
+
+  it('decelerates on show and accelerates on hide, unless an easing is given', () => {
+    mockAnimate();
+    void new SplitKeyframesAnimationEngine().animate(context().ctx);
+    void new SplitKeyframesAnimationEngine().animate(context({ phase: 'hide' }).ctx);
+    void new SplitKeyframesAnimationEngine().animate(
+      context({
+        phase: 'hide',
+        options: { preset: 'slide', easing: 'linear', respectReducedMotion: true },
+      }).ctx,
+    );
+    expect(animations.map((a) => a.options.easing)).toEqual([
+      SPLIT_DEFAULT_EASING,
+      SPLIT_DEFAULT_HIDE_EASING,
+      'linear',
+    ]);
+  });
+
+  it('with fade, animates only the shell, unless host/push keyframes are given', () => {
+    const push = {
+      layout: 'push' as const,
+      options: { preset: 'fade' as const, respectReducedMotion: true },
+      from: frame({ hostSize: '300px', push: '300px' }),
+      to: frame({ hostSize: '0px', push: '0px' }),
+      properties: { host: 'width' as const, push: 'padding-right' },
+    };
+    const target = document.createElement('main');
+
+    mockAnimate();
+    const plain = context({ phase: 'hide', ...push });
+    void new SplitKeyframesAnimationEngine().animate({
+      ...plain.ctx,
+      elements: { ...plain.ctx.elements, pushTarget: target },
+    });
+    expect(animations.map((a) => a.el)).toEqual([plain.shell]);
+
+    mockAnimate();
+    const custom = context({ phase: 'hide', ...push });
+    void new SplitKeyframesAnimationEngine({
+      push: [{ paddingRight: '300px' }, { paddingRight: '300px' }],
+    }).animate({ ...custom.ctx, elements: { ...custom.ctx.elements, pushTarget: target } });
+    expect(animations.map((a) => a.el)).toEqual([custom.shell, target]);
   });
 
   it('uses custom keyframes, fade and none; aborts cancel the animations', () => {
